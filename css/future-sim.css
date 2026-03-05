@@ -1,0 +1,692 @@
+/* === Future Budget Simulator Tab Styles === */
+
+/* Layout */
+#tab-future {
+  display: none;
+  padding: 0;
+}
+
+#tab-future.active {
+  display: block;
+}
+
+.fs-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Section headers */
+.fs-section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.fs-section-header h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.fs-section-header .fs-badge {
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* KPI Cards Row */
+.fs-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.fs-kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.fs-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.fs-kpi-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fs-kpi-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.fs-kpi-sub {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.fs-kpi-sub.positive {
+  color: var(--green);
+}
+
+.fs-kpi-sub.negative {
+  color: var(--red);
+}
+
+.fs-kpi-sub.neutral {
+  color: var(--text-muted);
+}
+
+.fs-kpi-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  margin-bottom: 4px;
+}
+
+.fs-kpi-icon.blue { background: var(--accent-dim); }
+.fs-kpi-icon.green { background: var(--green-dim); }
+.fs-kpi-icon.purple { background: var(--purple-dim); }
+.fs-kpi-icon.red { background: var(--red-dim); }
+.fs-kpi-icon.yellow { background: var(--yellow-dim); }
+
+/* Cards */
+.fs-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.fs-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fs-card-title .icon {
+  font-size: 1.1rem;
+}
+
+/* Scenario Selector */
+.fs-scenario-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+.fs-scenario-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.fs-scenario-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.fs-scenario-btn.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Sliders */
+.fs-sliders-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.fs-slider-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px;
+  background: var(--bg-primary);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.fs-slider-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.fs-slider-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 55px;
+  text-align: right;
+}
+
+.fs-slider-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+}
+
+.fs-slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  transition: transform 0.15s;
+}
+
+.fs-slider-input::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.fs-slider-input::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+.fs-slider-budget {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Chart Grid */
+.fs-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+  gap: 20px;
+}
+
+.fs-chart-wrapper {
+  position: relative;
+  min-height: 340px;
+}
+
+.fs-chart-wrapper canvas {
+  max-height: 380px;
+}
+
+/* Comparison Section */
+.fs-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.fs-compare-slot {
+  background: var(--bg-primary);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s;
+}
+
+.fs-compare-slot.filled {
+  border-style: solid;
+  border-color: var(--accent);
+}
+
+.fs-compare-slot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.fs-compare-slot-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.fs-compare-slot-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px;
+  line-height: 1;
+  font-family: inherit;
+}
+
+.fs-compare-slot-remove:hover {
+  color: var(--red);
+}
+
+.fs-compare-slot-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.fs-compare-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.82rem;
+}
+
+.fs-compare-item:last-child {
+  border-bottom: none;
+}
+
+.fs-compare-item-label {
+  color: var(--text-secondary);
+}
+
+.fs-compare-item-value {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* International Comparison */
+.fs-intl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.fs-intl-table th {
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-weight: 600;
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+
+.fs-intl-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.fs-intl-table tr:hover td {
+  background: var(--table-row-hover);
+}
+
+.fs-intl-flag {
+  font-size: 1.2rem;
+  margin-right: 6px;
+}
+
+.fs-intl-bar-cell {
+  position: relative;
+  min-width: 120px;
+}
+
+.fs-intl-bar {
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  min-width: 20px;
+  transition: width 0.6s ease;
+}
+
+/* Save/Load Controls */
+.fs-action-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.fs-action-btn {
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fs-action-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fs-action-btn.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.fs-action-btn.primary:hover {
+  background: var(--accent-hover);
+}
+
+.fs-action-btn.danger {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.fs-action-btn.danger:hover {
+  background: var(--red-dim);
+}
+
+/* Saved Scenarios List */
+.fs-saved-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.fs-saved-chip {
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.fs-saved-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fs-saved-chip .remove {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.fs-saved-chip .remove:hover {
+  color: var(--red);
+}
+
+/* Tabs within future sim */
+.fs-inner-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+
+.fs-inner-tab {
+  padding: 10px 20px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  white-space: nowrap;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.fs-inner-tab:hover {
+  color: var(--text-primary);
+}
+
+.fs-inner-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.fs-inner-panel {
+  display: none;
+}
+
+.fs-inner-panel.active {
+  display: block;
+}
+
+/* Confidence interval legend */
+.fs-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.fs-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fs-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.fs-legend-line {
+  width: 20px;
+  height: 3px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Model selector radio-style */
+.fs-model-group {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.fs-model-option {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.fs-model-option.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Year range display */
+.fs-year-range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.fs-year-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.fs-year-dot.actual {
+  background: var(--green);
+}
+
+.fs-year-dot.forecast {
+  background: var(--yellow);
+}
+
+/* Highlight numbers */
+.fs-highlight {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.fs-highlight-green {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.fs-highlight-red {
+  color: var(--red);
+  font-weight: 700;
+}
+
+/* Department mini bar */
+.fs-dept-mini-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.fs-dept-mini-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+
+/* Waterfall chart via D3 */
+.fs-waterfall-svg {
+  width: 100%;
+  overflow: visible;
+}
+
+.fs-waterfall-svg text {
+  fill: var(--text-secondary);
+  font-size: 11px;
+}
+
+.fs-waterfall-svg .axis text {
+  fill: var(--text-secondary);
+}
+
+.fs-waterfall-svg .axis line,
+.fs-waterfall-svg .axis path {
+  stroke: var(--border);
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .fs-chart-grid {
+    grid-template-columns: 1fr;
+  }
+  .fs-compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .fs-kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .fs-sliders-grid {
+    grid-template-columns: 1fr;
+  }
+  .fs-chart-grid {
+    grid-template-columns: 1fr;
+  }
+  .fs-chart-wrapper {
+    min-height: 260px;
+  }
+}
+
+/* Animation */
+@keyframes fs-fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fs-animate {
+  animation: fs-fadeIn 0.4s ease forwards;
+}
+
+.fs-animate-delay-1 { animation-delay: 0.1s; opacity: 0; }
+.fs-animate-delay-2 { animation-delay: 0.2s; opacity: 0; }
+.fs-animate-delay-3 { animation-delay: 0.3s; opacity: 0; }
+.fs-animate-delay-4 { animation-delay: 0.4s; opacity: 0; }
