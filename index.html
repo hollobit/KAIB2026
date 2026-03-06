@@ -61657,14 +61657,47 @@ function switchToTab(tabName, pushState) {
 
   // Update URL hash
   if (pushState !== false) {
-    let hash = '#' + tabName;
-    if (tabName === 'projects') {
-      const params = getProjectHashParams();
-      if (params) hash += '?' + params;
-    }
-    if (location.hash !== hash) {
-      history.pushState(null, '', hash);
-    }
+    updateTabHash(tabName);
+  }
+}
+
+function updateTabHash(tabName) {
+  let hash = '#' + tabName;
+  if (tabName === 'projects') {
+    const params = getProjectHashParams();
+    if (params) hash += '?' + params;
+  } else {
+    const sub = getActiveSubTab(tabName);
+    if (sub) hash += '?sub=' + encodeURIComponent(sub);
+  }
+  if (location.hash !== hash) {
+    history.pushState(null, '', hash);
+  }
+}
+
+function getActiveSubTab(tabName) {
+  if (tabName === 'policy') {
+    return document.querySelector('#tab-policy .pc-sub-tab.active')?.dataset?.subtab || '';
+  }
+  if (tabName === 'cross-compare') {
+    return document.querySelector('#tab-cross-compare .cc-sub-tab.active')?.dataset?.subtab || '';
+  }
+  if (tabName === 'future') {
+    return document.querySelector('#tab-future .fs-inner-tab.active')?.dataset?.panel || '';
+  }
+  return '';
+}
+
+function activateSubTab(tabName, subId) {
+  if (!subId) return;
+  if (tabName === 'policy' && typeof switchPcSubTab === 'function') {
+    switchPcSubTab(subId);
+  }
+  if (tabName === 'cross-compare' && typeof switchCcSubTab === 'function') {
+    switchCcSubTab(subId);
+  }
+  if (tabName === 'future' && typeof switchFsSubTab === 'function') {
+    switchFsSubTab(subId);
   }
 }
 
@@ -61720,6 +61753,10 @@ function restoreFromHash() {
     updateProjectList();
   }
   switchToTab(tab, false);
+  // Restore sub-tab after main tab is rendered
+  if (params.sub) {
+    requestAnimationFrame(() => activateSubTab(tab, params.sub));
+  }
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn => {

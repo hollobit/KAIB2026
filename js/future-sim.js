@@ -461,16 +461,17 @@ function initFutureSimTab(DATA) {
     `;
 
     // Event: Inner tabs
+    function switchFsSubTab(panelId) {
+      container.querySelectorAll('.fs-inner-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === panelId));
+      container.querySelectorAll('.fs-inner-panel').forEach(p => p.classList.toggle('active', p.id === 'fs-panel-' + panelId));
+      activeInnerTab = panelId;
+      renderActivePanel();
+      if (typeof updateTabHash === 'function') updateTabHash('future');
+    }
+    window.switchFsSubTab = switchFsSubTab;
+
     container.querySelectorAll('.fs-inner-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        container.querySelectorAll('.fs-inner-tab').forEach(t => t.classList.remove('active'));
-        container.querySelectorAll('.fs-inner-panel').forEach(p => p.classList.remove('active'));
-        tab.classList.add('active');
-        const panelId = 'fs-panel-' + tab.dataset.panel;
-        document.getElementById(panelId)?.classList.add('active');
-        activeInnerTab = tab.dataset.panel;
-        renderActivePanel();
-      });
+      tab.addEventListener('click', () => switchFsSubTab(tab.dataset.panel));
     });
   }
 

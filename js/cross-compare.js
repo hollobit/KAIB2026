@@ -99,16 +99,7 @@ function initCrossCompareTab(DATA) {
     btn.className = 'cc-sub-tab' + (i === 0 ? ' active' : '');
     btn.textContent = t.label;
     btn.dataset.subtab = t.id;
-    btn.addEventListener('click', () => {
-      subTabNav.querySelectorAll('.cc-sub-tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      container.querySelectorAll('.cc-sub-content').forEach(c => c.classList.remove('active'));
-      document.getElementById(t.id).classList.add('active');
-      if (t.id === 'cc-cross') renderCrossSection();
-      if (t.id === 'cc-efficiency') renderEfficiencySection();
-      if (t.id === 'cc-trend') renderTrendSection();
-      if (t.id === 'cc-domain') renderDomainSection();
-    });
+    btn.addEventListener('click', () => switchCcSubTab(t.id));
     subTabNav.appendChild(btn);
   });
   container.appendChild(subTabNav);
@@ -119,6 +110,17 @@ function initCrossCompareTab(DATA) {
     div.className = 'cc-sub-content' + (i === 0 ? ' active' : '');
     container.appendChild(div);
   });
+
+  function switchCcSubTab(tabId) {
+    subTabNav.querySelectorAll('.cc-sub-tab').forEach(b => b.classList.toggle('active', b.dataset.subtab === tabId));
+    container.querySelectorAll('.cc-sub-content').forEach(c => c.classList.toggle('active', c.id === tabId));
+    if (tabId === 'cc-cross') renderCrossSection();
+    if (tabId === 'cc-efficiency') renderEfficiencySection();
+    if (tabId === 'cc-trend') renderTrendSection();
+    if (tabId === 'cc-domain') renderDomainSection();
+    if (typeof updateTabHash === 'function') updateTabHash('cross-compare');
+  }
+  window.switchCcSubTab = switchCcSubTab;
 
   // ════════════════════════════════════════════════════
   // 1. 부처간 크로스 비교

@@ -230,7 +230,10 @@
         delete _pendingRenders[tabId];
       });
     }
+    // Update URL hash
+    if (typeof updateTabHash === 'function') updateTabHash('policy');
   }
+  window.switchPcSubTab = switchPcSubTab;
 
   // ══════════════════════════════════════════════════════════
   // MAIN ENTRY POINT
