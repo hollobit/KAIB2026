@@ -186,10 +186,19 @@
   // ── Sub-tab switching ──────────────────────────────────────
   let currentSubTab = 'theme-analysis';
 
+  let _pendingRenders = {};
+
   function switchPcSubTab(tabId) {
     currentSubTab = tabId;
     document.querySelectorAll('#tab-policy .pc-sub-tab').forEach(b => b.classList.toggle('active', b.dataset.subtab === tabId));
     document.querySelectorAll('#tab-policy .pc-sub-content').forEach(c => c.classList.toggle('active', c.id === 'pc-' + tabId));
+    // Execute deferred renders after tab is visible
+    if (_pendingRenders[tabId]) {
+      requestAnimationFrame(() => {
+        _pendingRenders[tabId]();
+        delete _pendingRenders[tabId];
+      });
+    }
   }
 
   // ══════════════════════════════════════════════════════════
@@ -229,10 +238,11 @@
     // ── Render KPI row ─────────────────────────────────────
     renderKPI(projects, themeMap);
 
-    // ── Render all sub-tabs ────────────────────────────────
+    // ── Render all sub-tabs (defer D3 charts until visible) ─
     renderThemeAnalysis(projects, themeMap, classMap);
-    renderPortfolio(projects, themeMap, classMap);
-    renderPerformance(projects, themeMap, classMap);
+    // Portfolio & Performance have D3 charts that need visible container for clientWidth
+    _pendingRenders['portfolio'] = () => renderPortfolio(projects, themeMap, classMap);
+    _pendingRenders['performance'] = () => renderPerformance(projects, themeMap, classMap);
     renderRecommendations(projects, themeMap, classMap);
   }
 
@@ -549,20 +559,25 @@
     // Calculate innovation score per project
     const data = projects.map(p => {
       const themes = classMap[p.id] || [];
-      const isRnd = p.is_rnd ? 1 : 0;
+      const isRnd = (p.type || '').includes('R&D') || (p.type || '').includes('연구') ? 1 : 0;
       const rndTheme = themes.find(t => t.themeId === 'rnd');
-      const innovScore = (rndTheme ? rndTheme.score / 20 : 0) + isRnd * 0.3 + (themes.length > 2 ? 0.2 : 0);
+      const rndScore = rndTheme ? Math.min(rndTheme.score / 15, 0.5) : 0;
+      const themeBonus = themes.length > 2 ? 0.15 : themes.length > 1 ? 0.08 : 0;
+      const changeBonus = Math.abs(_rate(p)) > 20 ? 0.1 : 0;
+      const innovScore = rndScore + isRnd * 0.3 + themeBonus + changeBonus;
       const budget = _b26(p);
       return { id: p.id, name: (p.name || '').substring(0, 20), dept: p.department || '', budget, innovScore: Math.min(innovScore, 1), themes };
     }).filter(d => d.budget > 0);
 
     const margin = { top: 30, right: 30, bottom: 40, left: 50 };
-    const width = container.clientWidth - margin.left - margin.right;
+    const containerWidth = container.clientWidth || container.parentElement?.clientWidth || 600;
+    const width = containerWidth - margin.left - margin.right;
     const height = 380 - margin.top - margin.bottom;
 
     container.innerHTML = '';
     const svg = d3.select(container).append('svg')
-      .attr('width', width + margin.left + margin.right)
+      .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+      .attr('width', '100%')
       .attr('height', height + margin.top + margin.bottom)
       .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
@@ -792,12 +807,14 @@
     }).filter(d => d.budget > 0);
 
     const margin = { top: 30, right: 20, bottom: 40, left: 55 };
-    const width = container.clientWidth - margin.left - margin.right;
+    const containerWidth = container.clientWidth || container.parentElement?.clientWidth || 600;
+    const width = containerWidth - margin.left - margin.right;
     const height = 360 - margin.top - margin.bottom;
 
     container.innerHTML = '';
     const svg = d3.select(container).append('svg')
-      .attr('width', width + margin.left + margin.right)
+      .attr('viewBox', `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+      .attr('width', '100%')
       .attr('height', height + margin.top + margin.bottom)
       .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
