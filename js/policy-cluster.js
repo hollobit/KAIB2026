@@ -118,6 +118,37 @@
   function _grid() { return typeof getChartGridColor === 'function' ? getChartGridColor() : '#2a3a4e33'; }
   function _destroy(id) { if (typeof destroyChart === 'function') destroyChart(id); }
   function _b26(p) { return p.budget?.budget_2026 ?? p.budget?.['2026_budget'] ?? 0; }
+
+  // Budget weight for a project in a specific theme (proportional to score)
+  // If a project belongs to 3 themes with scores [10, 5, 5], theme1 gets 50%, theme2/3 get 25% each
+  let _classMap = null; // set during init
+  function _weightedB26(p, themeId) {
+    if (!_classMap || !_classMap[p.id]) return _b26(p);
+    const themes = _classMap[p.id];
+    if (themes.length <= 1) return _b26(p);
+    const totalScore = themes.reduce((s, t) => s + t.score, 0);
+    const thisTheme = themes.find(t => t.themeId === themeId);
+    if (!thisTheme || totalScore <= 0) return 0;
+    return _b26(p) * (thisTheme.score / totalScore);
+  }
+  function _weightedB25(p, themeId) {
+    if (!_classMap || !_classMap[p.id]) return _b25(p);
+    const themes = _classMap[p.id];
+    if (themes.length <= 1) return _b25(p);
+    const totalScore = themes.reduce((s, t) => s + t.score, 0);
+    const thisTheme = themes.find(t => t.themeId === themeId);
+    if (!thisTheme || totalScore <= 0) return 0;
+    return _b25(p) * (thisTheme.score / totalScore);
+  }
+  function _weightedB24(p, themeId) {
+    if (!_classMap || !_classMap[p.id]) return _b24(p);
+    const themes = _classMap[p.id];
+    if (themes.length <= 1) return _b24(p);
+    const totalScore = themes.reduce((s, t) => s + t.score, 0);
+    const thisTheme = themes.find(t => t.themeId === themeId);
+    if (!thisTheme || totalScore <= 0) return 0;
+    return _b24(p) * (thisTheme.score / totalScore);
+  }
   function _b25(p) { return p.budget?.budget_2025 ?? p.budget?.['2025_original'] ?? 0; }
   function _b24(p) { return p.budget?.budget_2024 ?? p.budget?.['2024_settlement'] ?? 0; }
   function _rate(p) { return p.budget?.change_rate ?? 0; }
@@ -210,6 +241,7 @@
 
     const projects = DATA.projects || [];
     const { map: classMap, themeMap } = buildClassification(projects);
+    _classMap = classMap; // store for weighted budget calculations
 
     // ── Build shell HTML ───────────────────────────────────
     container.innerHTML = `
@@ -218,6 +250,7 @@
         <button class="pc-sub-tab" data-subtab="portfolio">전략 포트폴리오</button>
         <button class="pc-sub-tab" data-subtab="performance">성과 연계 분석</button>
         <button class="pc-sub-tab" data-subtab="recommendations">정책 제언</button>
+        <button class="pc-sub-tab" data-subtab="ai-pure">AI 순예산</button>
       </div>
 
       <!-- KPI summary -->
@@ -228,6 +261,7 @@
       <div class="pc-sub-content" id="pc-portfolio"></div>
       <div class="pc-sub-content" id="pc-performance"></div>
       <div class="pc-sub-content" id="pc-recommendations"></div>
+      <div class="pc-sub-content" id="pc-ai-pure"></div>
     `;
 
     // Sub-tab click handlers
@@ -244,6 +278,7 @@
     _pendingRenders['portfolio'] = () => renderPortfolio(projects, themeMap, classMap);
     _pendingRenders['performance'] = () => renderPerformance(projects, themeMap, classMap);
     renderRecommendations(projects, themeMap, classMap);
+    _pendingRenders['ai-pure'] = () => renderAiPureBudget(projects);
   }
 
   // ══════════════════════════════════════════════════════════
@@ -256,12 +291,12 @@
     const themeCount = THEMES.filter(t => themeMap[t.id].length > 0).length;
     const maxTheme = THEMES.reduce((best, t) => themeMap[t.id].length > (themeMap[best.id]?.length || 0) ? t : best, THEMES[0]);
     const maxBudgetTheme = THEMES.reduce((best, t) => {
-      const b = themeMap[t.id].reduce((s, p) => s + _b26(p), 0);
-      return b > (themeMap[best.id]?.reduce((s2, p2) => s2 + _b26(p2), 0) || 0) ? t : best;
+      const b = themeMap[t.id].reduce((s, p) => s + _weightedB26(p, t.id), 0);
+      return b > (themeMap[best.id]?.reduce((s2, p2) => s2 + _weightedB26(p2, best.id), 0) || 0) ? t : best;
     }, THEMES[0]);
 
     // Diversity index (Shannon entropy normalized)
-    const budgets = THEMES.map(t => themeMap[t.id].reduce((s, p) => s + _b26(p), 0));
+    const budgets = THEMES.map(t => themeMap[t.id].reduce((s, p) => s + _weightedB26(p, t.id), 0));
     const bTotal = budgets.reduce((a, b) => a + b, 0) || 1;
     let entropy = 0;
     budgets.forEach(b => { if (b > 0) { const p = b / bTotal; entropy -= p * Math.log2(p); } });
@@ -288,6 +323,7 @@
     el.innerHTML = `
       <div class="pc-section">
         <div class="pc-section-title"><span class="pc-icon">T</span> 정책 테마 자동 분류</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">사업 수는 중복 허용 (다중 테마 배정), 예산은 테마별 점수 비중으로 비례 배분</div>
         <div id="pc-theme-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
       </div>
       <div class="pc-grid-2">
@@ -333,7 +369,7 @@
     if (!el) return;
     el.innerHTML = THEMES.map(t => {
       const count = themeMap[t.id].length;
-      const budget = themeMap[t.id].reduce((s, p) => s + _b26(p), 0);
+      const budget = themeMap[t.id].reduce((s, p) => s + _weightedB26(p, t.id), 0);
       return `<span class="pc-theme-tag ${t.cssClass}" data-theme="${t.id}" title="${t.name}: ${count}개 사업, ${_fmt(budget)}">${t.name} <b>${count}</b></span>`;
     }).join('');
     el.querySelectorAll('.pc-theme-tag').forEach(tag => {
@@ -348,13 +384,13 @@
     if (!card || !title || !body) return;
     const theme = THEMES.find(t => t.id === themeId);
     if (!theme) return;
-    const ps = (themeMap[themeId] || []).sort((a, b) => _b26(b) - _b26(a));
-    title.textContent = `${theme.name} - ${ps.length}개 사업 (${_fmt(ps.reduce((s, p) => s + _b26(p), 0))})`;
+    const ps = (themeMap[themeId] || []).sort((a, b) => _weightedB26(b, themeId) - _weightedB26(a, themeId));
+    title.textContent = `${theme.name} - ${ps.length}개 사업 (${_fmt(ps.reduce((s, p) => s + _weightedB26(p, themeId), 0))})`;
     body.innerHTML = `<div class="pc-project-list">${ps.map(p =>
       `<div class="pc-project-row" onclick="if(typeof showProjectModal==='function')showProjectModal(${p.id})">
         <span class="proj-name">${p.name || p.project_name || ''}</span>
         <span class="proj-dept">${(p.department || '').substring(0, 8)}</span>
-        <span class="proj-budget">${_fmt(_b26(p))}</span>
+        <span class="proj-budget">${_fmt(_weightedB26(p, themeId))}</span>
       </div>`
     ).join('')}</div>`;
     card.style.display = 'block';
@@ -365,7 +401,7 @@
     pcDestroy('theme-donut');
     const canvas = document.getElementById('pc-chart-theme-donut');
     if (!canvas) return;
-    const budgets = THEMES.map(t => themeMap[t.id].reduce((s, p) => s + _b26(p), 0));
+    const budgets = THEMES.map(t => themeMap[t.id].reduce((s, p) => s + _weightedB26(p, t.id), 0));
     const total = budgets.reduce((a, b) => a + b, 0) || 1;
     pcCharts['theme-donut'] = new Chart(canvas, {
       type: 'doughnut',
@@ -389,7 +425,7 @@
     const canvas = document.getElementById('pc-chart-theme-bar');
     if (!canvas) return;
     const counts = THEMES.map(t => themeMap[t.id].length);
-    const budgets = THEMES.map(t => themeMap[t.id].reduce((s, p) => s + _b26(p), 0));
+    const budgets = THEMES.map(t => themeMap[t.id].reduce((s, p) => s + _weightedB26(p, t.id), 0));
     pcCharts['theme-bar'] = new Chart(canvas, {
       type: 'bar',
       data: {
@@ -432,7 +468,7 @@
     depts.forEach(d => {
       matrix[d] = {};
       THEMES.forEach(t => {
-        const budget = themeMap[t.id].filter(p => p.department === d).reduce((s, p) => s + _b26(p), 0);
+        const budget = themeMap[t.id].filter(p => p.department === d).reduce((s, p) => s + _weightedB26(p, t.id), 0);
         matrix[d][t.id] = budget;
         if (budget > maxVal) maxVal = budget;
       });
@@ -469,9 +505,9 @@
     const canvas = document.getElementById('pc-chart-theme-trend');
     if (!canvas) return;
     const datasets = THEMES.map(t => {
-      const b24 = themeMap[t.id].reduce((s, p) => s + _b24(p), 0);
-      const b25 = themeMap[t.id].reduce((s, p) => s + _b25(p), 0);
-      const b26 = themeMap[t.id].reduce((s, p) => s + _b26(p), 0);
+      const b24 = themeMap[t.id].reduce((s, p) => s + _weightedB24(p, t.id), 0);
+      const b25 = themeMap[t.id].reduce((s, p) => s + _weightedB25(p, t.id), 0);
+      const b26 = themeMap[t.id].reduce((s, p) => s + _weightedB26(p, t.id), 0);
       return {
         label: t.name,
         data: [b24, b25, b26],
@@ -504,7 +540,7 @@
   function renderBalanceScorecard(themeMap) {
     const el = document.getElementById('pc-balance-scorecard');
     if (!el) return;
-    const budgets = THEMES.map(t => ({ name: t.name, id: t.id, budget: themeMap[t.id].reduce((s, p) => s + _b26(p), 0) }));
+    const budgets = THEMES.map(t => ({ name: t.name, id: t.id, budget: themeMap[t.id].reduce((s, p) => s + _weightedB26(p, t.id), 0) }));
     const maxBudget = Math.max(...budgets.map(b => b.budget), 1);
     budgets.sort((a, b) => b.budget - a.budget);
 
@@ -739,7 +775,7 @@
       const total = deptProjects.reduce((s, p) => s + _b26(p), 0);
       if (total <= 0) return { dept, hhi: 10000, diversity: 0, themeCount: 0 };
       const themeShares = THEMES.map(t => {
-        const b = themeMap[t.id].filter(p => p.department === dept).reduce((s, p) => s + _b26(p), 0);
+        const b = themeMap[t.id].filter(p => p.department === dept).reduce((s, p) => s + _weightedB26(p, t.id), 0);
         return b / total;
       });
       const hhi = themeShares.reduce((s, sh) => s + sh * sh * 10000, 0);
@@ -997,7 +1033,7 @@
 
     // 1. Investment gap analysis: themes with very low budget share
     const themeShares = THEMES.map(t => {
-      const b = themeMap[t.id].reduce((s, p) => s + _b26(p), 0);
+      const b = themeMap[t.id].reduce((s, p) => s + _weightedB26(p, t.id), 0);
       return { theme: t, budget: b, share: b / totalBudget * 100, count: themeMap[t.id].length };
     }).sort((a, b) => a.share - b.share);
 
@@ -1042,8 +1078,8 @@
 
     // 3. Theme trend analysis (declining themes)
     THEMES.forEach(t => {
-      const b25 = themeMap[t.id].reduce((s, p) => s + _b25(p), 0);
-      const b26 = themeMap[t.id].reduce((s, p) => s + _b26(p), 0);
+      const b25 = themeMap[t.id].reduce((s, p) => s + _weightedB25(p, t.id), 0);
+      const b26 = themeMap[t.id].reduce((s, p) => s + _weightedB26(p, t.id), 0);
       if (b25 > 0) {
         const change = ((b26 - b25) / b25 * 100);
         if (change < -20 && themeMap[t.id].length >= 5) {
@@ -1123,6 +1159,389 @@
     recs.sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity]);
 
     return recs;
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 5. AI 순예산 SUB-TAB
+  // ══════════════════════════════════════════════════════════
+  const AI_KEYWORDS = ['AI', 'AX', '인공지능', '파운데이션', '데이터', '생성형', 'LLM', '초거대', '학습데이터', '클라우드', '딥러닝', '머신러닝', '자연어', 'GPT', '언어모델', 'sLM', 'AI안전', 'AI보안', 'NPU', '에이전트', 'Agent', '피지컬', '휴머노이드', '로봇', 'GPU', '온디바이스'];
+
+  function isAiSubProject(name) {
+    if (!name) return false;
+    const upper = name.toUpperCase();
+    return AI_KEYWORDS.some(kw => upper.includes(kw.toUpperCase()));
+  }
+
+  function matchedKeywords(name) {
+    if (!name) return [];
+    const upper = name.toUpperCase();
+    return AI_KEYWORDS.filter(kw => upper.includes(kw.toUpperCase()));
+  }
+
+  function renderAiPureBudget(projects) {
+    const el = document.getElementById('pc-ai-pure');
+    if (!el) return;
+
+    // ── 1. Build AI sub-project dataset ──
+    const aiSubs = [];
+    const aiProjects = new Set();
+    const allSubs = [];
+
+    projects.forEach(p => {
+      const subs = p.sub_projects || [];
+      const mgrs = p.project_managers || [];
+      if (subs.length > 0) {
+        subs.forEach(s => {
+          const row = {
+            projectId: p.id,
+            projectName: p.project_name || p.name || '',
+            department: p.department || '',
+            subName: s.name || '',
+            budget2024: s.budget_2024 || 0,
+            budget2025: s.budget_2025 || 0,
+            budget2026: s.budget_2026 || 0,
+            isAi: isAiSubProject(s.name),
+            matchedKw: matchedKeywords(s.name),
+            field: p.field || '',
+            type: p.type || ''
+          };
+          allSubs.push(row);
+          if (row.isAi) { aiSubs.push(row); aiProjects.add(p.id); }
+        });
+      } else {
+        // No sub_projects: check project name itself
+        const pName = p.project_name || p.name || '';
+        const row = {
+          projectId: p.id,
+          projectName: pName,
+          department: p.department || '',
+          subName: pName,
+          budget2024: _b24(p),
+          budget2025: _b25(p),
+          budget2026: _b26(p),
+          isAi: isAiSubProject(pName),
+          matchedKw: matchedKeywords(pName),
+          field: p.field || '',
+          type: p.type || ''
+        };
+        allSubs.push(row);
+        if (row.isAi) { aiSubs.push(row); aiProjects.add(p.id); }
+      }
+    });
+
+    const totalAllBudget = projects.reduce((s, p) => s + _b26(p), 0);
+    const aiBudget26 = aiSubs.reduce((s, r) => s + r.budget2026, 0);
+    const aiBudget25 = aiSubs.reduce((s, r) => s + r.budget2025, 0);
+    const aiBudget24 = aiSubs.reduce((s, r) => s + r.budget2024, 0);
+    const aiPct = totalAllBudget > 0 ? (aiBudget26 / totalAllBudget * 100) : 0;
+    const aiGrowth = aiBudget25 > 0 ? ((aiBudget26 - aiBudget25) / aiBudget25 * 100) : 0;
+
+    // ── 2. Department aggregation ──
+    const deptMap = {};
+    aiSubs.forEach(r => {
+      if (!deptMap[r.department]) deptMap[r.department] = { budget26: 0, budget25: 0, count: 0, subs: [] };
+      deptMap[r.department].budget26 += r.budget2026;
+      deptMap[r.department].budget25 += r.budget2025;
+      deptMap[r.department].count += 1;
+      deptMap[r.department].subs.push(r);
+    });
+    const deptRank = Object.entries(deptMap)
+      .map(([dept, v]) => ({ dept, ...v }))
+      .sort((a, b) => b.budget26 - a.budget26);
+
+    // ── 3. Keyword frequency ──
+    const kwFreq = {};
+    const kwBudget = {};
+    aiSubs.forEach(r => {
+      r.matchedKw.forEach(kw => {
+        kwFreq[kw] = (kwFreq[kw] || 0) + 1;
+        kwBudget[kw] = (kwBudget[kw] || 0) + r.budget2026;
+      });
+    });
+    const kwRank = Object.entries(kwFreq)
+      .map(([kw, cnt]) => ({ kw, cnt, budget: kwBudget[kw] || 0 }))
+      .sort((a, b) => b.budget - a.budget);
+
+    // ── 4. Render HTML ──
+    el.innerHTML = `
+      <div class="pc-section">
+        <div class="pc-section-title"><span class="pc-icon">*</span> AI 순예산 분석</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">
+          세부사업명/과제명에 ${AI_KEYWORDS.slice(0, 8).join(', ')} 등 AI 키워드가 포함된 내역사업만 추출하여 분석한 순(純) AI 예산입니다.
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div class="pc-kpi-row" id="pc-ai-kpi"></div>
+
+      <!-- Charts row -->
+      <div class="pc-grid-2">
+        <div class="card">
+          <div class="card-title">부처별 AI 순예산 (상위 15)</div>
+          <div class="chart-container" style="height:400px"><canvas id="pc-ai-dept-bar"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">AI 순예산 vs 전체 예산 비율</div>
+          <div class="chart-container" style="height:400px"><canvas id="pc-ai-ratio-bar"></canvas></div>
+        </div>
+      </div>
+
+      <div class="pc-grid-2">
+        <div class="card">
+          <div class="card-title">키워드별 예산 분포</div>
+          <div class="chart-container" style="height:320px"><canvas id="pc-ai-kw-chart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">연도별 AI 순예산 추이</div>
+          <div class="chart-container" style="height:320px"><canvas id="pc-ai-trend-chart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Detail table -->
+      <div class="card">
+        <div class="card-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span>AI 키워드 내역사업 목록 (${aiSubs.length}건)</span>
+          <input type="text" id="pc-ai-search" placeholder="검색..." style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:12px;width:200px">
+          <select id="pc-ai-dept-filter" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:12px">
+            <option value="">전체 부처</option>
+            ${deptRank.map(d => `<option value="${d.dept}">${d.dept}</option>`).join('')}
+          </select>
+          <select id="pc-ai-kw-filter" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:12px">
+            <option value="">전체 키워드</option>
+            ${kwRank.map(k => `<option value="${k.kw}">${k.kw} (${k.cnt}건)</option>`).join('')}
+          </select>
+        </div>
+        <div id="pc-ai-table-wrap" style="overflow-x:auto;margin-top:8px"></div>
+        <div id="pc-ai-table-summary" style="font-size:12px;color:var(--text-secondary);margin-top:6px"></div>
+      </div>
+    `;
+
+    // ── 5. Render KPI ──
+    const kpiEl = document.getElementById('pc-ai-kpi');
+    if (kpiEl) {
+      kpiEl.innerHTML = `
+        <div class="pc-kpi-item"><div class="pc-kpi-value">${aiSubs.length}건</div><div class="pc-kpi-label">AI 내역사업 수</div></div>
+        <div class="pc-kpi-item"><div class="pc-kpi-value">${aiProjects.size}개</div><div class="pc-kpi-label">관련 사업 수</div></div>
+        <div class="pc-kpi-item"><div class="pc-kpi-value">${_fmt(aiBudget26)}</div><div class="pc-kpi-label">AI 순예산 (2026)</div></div>
+        <div class="pc-kpi-item"><div class="pc-kpi-value">${aiPct.toFixed(1)}%</div><div class="pc-kpi-label">전체 대비 비중</div></div>
+        <div class="pc-kpi-item"><div class="pc-kpi-value" style="color:${aiGrowth >= 0 ? 'var(--green)' : 'var(--red)'}">${aiGrowth >= 0 ? '+' : ''}${aiGrowth.toFixed(1)}%</div><div class="pc-kpi-label">전년 대비 증감</div></div>
+        <div class="pc-kpi-item"><div class="pc-kpi-value">${deptRank.length}개</div><div class="pc-kpi-label">관련 부처 수</div></div>
+      `;
+    }
+
+    // ── 6. Department bar chart ──
+    const top15 = deptRank.slice(0, 15);
+    pcCharts['ai-dept'] = new Chart(document.getElementById('pc-ai-dept-bar'), {
+      type: 'bar',
+      data: {
+        labels: top15.map(d => d.dept.length > 10 ? d.dept.substring(0, 10) + '..' : d.dept),
+        datasets: [
+          { label: '2026 AI 순예산', data: top15.map(d => d.budget26), backgroundColor: 'rgba(74,158,255,0.7)', borderRadius: 4 },
+          { label: '2025 AI 예산', data: top15.map(d => d.budget25), backgroundColor: 'rgba(167,139,250,0.4)', borderRadius: 4 }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: _lbl(), callback: v => _fmt(v) }, grid: { color: _grid() } },
+          y: { ticks: { color: _lbl(), font: { size: 11 } }, grid: { display: false } }
+        },
+        plugins: {
+          legend: { labels: { color: _lbl(), font: { size: 11 } } },
+          tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${_fmt(ctx.raw)}` } }
+        }
+      }
+    });
+
+    // ── 7. AI ratio per department ──
+    const ratioData = deptRank.slice(0, 15).map(d => {
+      const deptTotal = projects.filter(p => p.department === d.dept).reduce((s, p) => s + _b26(p), 0);
+      return { dept: d.dept, ratio: deptTotal > 0 ? (d.budget26 / deptTotal * 100) : 0, aiBudget: d.budget26, totalBudget: deptTotal };
+    }).sort((a, b) => b.ratio - a.ratio);
+
+    pcCharts['ai-ratio'] = new Chart(document.getElementById('pc-ai-ratio-bar'), {
+      type: 'bar',
+      data: {
+        labels: ratioData.map(d => d.dept.length > 10 ? d.dept.substring(0, 10) + '..' : d.dept),
+        datasets: [{
+          label: 'AI 예산 비율 (%)',
+          data: ratioData.map(d => d.ratio),
+          backgroundColor: ratioData.map(d => d.ratio > 50 ? 'rgba(52,211,153,0.7)' : d.ratio > 20 ? 'rgba(74,158,255,0.7)' : 'rgba(251,191,36,0.7)'),
+          borderRadius: 4
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { max: 100, ticks: { color: _lbl(), callback: v => v + '%' }, grid: { color: _grid() } },
+          y: { ticks: { color: _lbl(), font: { size: 11 } }, grid: { display: false } }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => `AI 비율: ${ctx.raw.toFixed(1)}% (${_fmt(ratioData[ctx.dataIndex].aiBudget)} / ${_fmt(ratioData[ctx.dataIndex].totalBudget)})` } }
+        }
+      }
+    });
+
+    // ── 8. Keyword chart ──
+    pcCharts['ai-kw'] = new Chart(document.getElementById('pc-ai-kw-chart'), {
+      type: 'bar',
+      data: {
+        labels: kwRank.map(k => k.kw),
+        datasets: [
+          { label: '예산 (백만원)', data: kwRank.map(k => k.budget), backgroundColor: 'rgba(74,158,255,0.7)', borderRadius: 4, yAxisID: 'y' },
+          { label: '건수', data: kwRank.map(k => k.cnt), type: 'line', borderColor: '#f87171', pointBackgroundColor: '#f87171', borderWidth: 2, yAxisID: 'y1' }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: _lbl(), font: { size: 11 } }, grid: { display: false } },
+          y: { position: 'left', ticks: { color: _lbl(), callback: v => _fmt(v) }, grid: { color: _grid() }, title: { display: true, text: '예산', color: _lbl() } },
+          y1: { position: 'right', ticks: { color: '#f87171' }, grid: { display: false }, title: { display: true, text: '건수', color: '#f87171' } }
+        },
+        plugins: {
+          legend: { labels: { color: _lbl(), font: { size: 11 } } },
+          tooltip: { callbacks: { label: ctx => ctx.datasetIndex === 0 ? `예산: ${_fmt(ctx.raw)}` : `${ctx.raw}건` } }
+        }
+      }
+    });
+
+    // ── 9. Year trend chart ──
+    pcCharts['ai-trend'] = new Chart(document.getElementById('pc-ai-trend-chart'), {
+      type: 'line',
+      data: {
+        labels: ['2024 결산', '2025 본예산', '2026 예산(안)'],
+        datasets: [{
+          label: 'AI 순예산',
+          data: [aiBudget24, aiBudget25, aiBudget26],
+          borderColor: '#4a9eff',
+          backgroundColor: 'rgba(74,158,255,0.15)',
+          borderWidth: 3,
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          fill: true,
+          tension: 0.3
+        }, {
+          label: '전체 예산',
+          data: [
+            projects.reduce((s, p) => s + _b24(p), 0),
+            projects.reduce((s, p) => s + _b25(p), 0),
+            totalAllBudget
+          ],
+          borderColor: '#a78bfa',
+          backgroundColor: 'rgba(167,139,250,0.08)',
+          borderWidth: 2,
+          pointRadius: 5,
+          borderDash: [6, 3],
+          fill: false,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: _lbl() }, grid: { display: false } },
+          y: { ticks: { color: _lbl(), callback: v => _fmt(v) }, grid: { color: _grid() } }
+        },
+        plugins: {
+          legend: { labels: { color: _lbl(), font: { size: 11 } } },
+          tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${_fmt(ctx.raw)}` } }
+        }
+      }
+    });
+
+    // ── 10. Detail table ──
+    let aiSortKey = 'budget2026';
+    let aiSortDir = 'desc';
+
+    function renderAiTable() {
+      const search = (document.getElementById('pc-ai-search')?.value || '').toLowerCase();
+      const deptFilter = document.getElementById('pc-ai-dept-filter')?.value || '';
+      const kwFilter = document.getElementById('pc-ai-kw-filter')?.value || '';
+
+      let filtered = aiSubs.filter(r => {
+        if (deptFilter && r.department !== deptFilter) return false;
+        if (kwFilter && !r.matchedKw.includes(kwFilter)) return false;
+        if (search && !r.subName.toLowerCase().includes(search) && !r.projectName.toLowerCase().includes(search) && !r.department.toLowerCase().includes(search)) return false;
+        return true;
+      });
+
+      // Sort
+      filtered.sort((a, b) => {
+        const va = a[aiSortKey] || 0;
+        const vb = b[aiSortKey] || 0;
+        if (typeof va === 'string') return aiSortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+        return aiSortDir === 'asc' ? va - vb : vb - va;
+      });
+
+      const sumB26 = filtered.reduce((s, r) => s + r.budget2026, 0);
+      const sumB25 = filtered.reduce((s, r) => s + r.budget2025, 0);
+
+      function si(key) {
+        if (aiSortKey !== key) return '';
+        return aiSortDir === 'asc' ? ' &#9650;' : ' &#9660;';
+      }
+
+      const wrap = document.getElementById('pc-ai-table-wrap');
+      const showRows = filtered.slice(0, 100);
+      wrap.innerHTML = `
+        <table class="data-table" style="width:100%;font-size:12px">
+          <thead><tr>
+            <th class="sortable" data-key="department" style="cursor:pointer">부처${si('department')}</th>
+            <th class="sortable" data-key="projectName" style="cursor:pointer">사업명${si('projectName')}</th>
+            <th class="sortable" data-key="subName" style="cursor:pointer">내역사업명${si('subName')}</th>
+            <th>매칭 키워드</th>
+            <th class="sortable num" data-key="budget2024" style="cursor:pointer;text-align:right">2024${si('budget2024')}</th>
+            <th class="sortable num" data-key="budget2025" style="cursor:pointer;text-align:right">2025${si('budget2025')}</th>
+            <th class="sortable num" data-key="budget2026" style="cursor:pointer;text-align:right">2026${si('budget2026')}</th>
+            <th style="text-align:right">증감</th>
+          </tr></thead>
+          <tbody>
+            ${showRows.map(r => {
+              const chg = r.budget2025 > 0 ? ((r.budget2026 - r.budget2025) / r.budget2025 * 100) : (r.budget2026 > 0 ? 999 : 0);
+              const chgStr = chg === 999 ? '순증' : (chg >= 0 ? '+' : '') + chg.toFixed(1) + '%';
+              const chgColor = chg > 0 ? 'var(--green)' : chg < 0 ? 'var(--red)' : 'var(--text-muted)';
+              const kwTags = r.matchedKw.map(kw => `<span style="background:var(--accent-dim);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:10px;margin-right:2px">${kw}</span>`).join('');
+              return `<tr style="cursor:pointer" onclick="if(typeof showProjectModal==='function')showProjectModal(${r.projectId})">
+                <td>${r.department.substring(0, 10)}</td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.projectName}">${r.projectName}</td>
+                <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.subName}">${r.subName}</td>
+                <td>${kwTags}</td>
+                <td style="text-align:right">${_fmt(r.budget2024)}</td>
+                <td style="text-align:right">${_fmt(r.budget2025)}</td>
+                <td style="text-align:right;font-weight:600">${_fmt(r.budget2026)}</td>
+                <td style="text-align:right;color:${chgColor};font-size:11px">${chgStr}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+
+      const summaryEl = document.getElementById('pc-ai-table-summary');
+      if (summaryEl) {
+        summaryEl.innerHTML = `총 ${filtered.length}건 | 2026 합계: <strong>${_fmt(sumB26)}</strong> | 2025 합계: ${_fmt(sumB25)} | 증감: <span style="color:${sumB26 >= sumB25 ? 'var(--green)' : 'var(--red)'}">${sumB25 > 0 ? ((sumB26 - sumB25) / sumB25 * 100).toFixed(1) : '-'}%</span>${filtered.length > 100 ? ` (상위 100건 표시)` : ''}`;
+      }
+
+      // Attach sort handlers
+      wrap.querySelectorAll('.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+          const key = th.dataset.key;
+          if (aiSortKey === key) aiSortDir = aiSortDir === 'asc' ? 'desc' : 'asc';
+          else { aiSortKey = key; aiSortDir = 'desc'; }
+          renderAiTable();
+        });
+      });
+    }
+
+    renderAiTable();
+
+    // Attach filter/search handlers
+    document.getElementById('pc-ai-search')?.addEventListener('input', () => { clearTimeout(window._aiSearchTimer); window._aiSearchTimer = setTimeout(renderAiTable, 300); });
+    document.getElementById('pc-ai-dept-filter')?.addEventListener('change', renderAiTable);
+    document.getElementById('pc-ai-kw-filter')?.addEventListener('change', renderAiTable);
   }
 
   // ── Export ──────────────────────────────────────────────────
