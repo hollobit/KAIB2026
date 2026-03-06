@@ -1405,6 +1405,16 @@
         plugins: {
           legend: { labels: { color: _lbl(), font: { size: 11 } } },
           tooltip: { callbacks: { label: ctx => ctx.datasetIndex === 0 ? `예산: ${_fmt(ctx.raw)}` : `${ctx.raw}건` } }
+        },
+        onClick: (evt, elements) => {
+          if (!elements || elements.length === 0) return;
+          const idx = elements[0].index;
+          const kw = kwRank[idx]?.kw;
+          if (!kw) return;
+          const sel = document.getElementById('pc-ai-kw-filter');
+          if (sel) { sel.value = kw; renderAiTable(); }
+          const tableWrap = document.getElementById('pc-ai-table-wrap');
+          if (tableWrap) tableWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       }
     });
