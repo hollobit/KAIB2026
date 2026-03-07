@@ -255,6 +255,7 @@
         <button class="pc-sub-tab" data-subtab="recommendations">정책 제언</button>
         <button class="pc-sub-tab" data-subtab="ai-pure">AI 순예산</button>
         <button class="pc-sub-tab" data-subtab="non-ai">비AI 추정 예산</button>
+        <button class="pc-sub-tab" data-subtab="ai-rnd">AI R&D 분석</button>
       </div>
 
       <!-- KPI summary -->
@@ -267,6 +268,7 @@
       <div class="pc-sub-content" id="pc-recommendations"></div>
       <div class="pc-sub-content" id="pc-ai-pure"></div>
       <div class="pc-sub-content" id="pc-non-ai"></div>
+      <div class="pc-sub-content" id="pc-ai-rnd"></div>
     `;
 
     // Sub-tab click handlers
@@ -285,6 +287,7 @@
     renderRecommendations(projects, themeMap, classMap);
     _pendingRenders['ai-pure'] = () => renderAiPureBudget(projects);
     _pendingRenders['non-ai'] = () => renderNonAiBudget(projects);
+    _pendingRenders['ai-rnd'] = () => renderAiRndAnalysis(projects);
   }
 
   // ══════════════════════════════════════════════════════════
@@ -2155,6 +2158,443 @@
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
           ${lowAi.length > 50 ? `상위 50건 표시 (전체 ${lowAi.length}건) | ` : ''}
           <span style="color:var(--green)">&#10003;</span> AI 키워드 있음 &nbsp; <span style="color:var(--red)">&#10007;</span> 없음 &nbsp; &#8212; 데이터 없음
+        </div>
+      `;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // AI R&D ANALYSIS SUB-TAB
+  // ══════════════════════════════════════════════════════════
+  function renderAiRndAnalysis(projects) {
+    const el = document.getElementById('pc-ai-rnd');
+    if (!el) return;
+
+    // ── Tech domain definitions ──
+    const AI_TECH_DOMAINS = {
+      'NLP/자연어처리': ['자연어', 'NLP', '언어모델', 'LLM', '챗봇', '번역', '텍스트', '음성인식', '음성합성', 'STT', 'TTS'],
+      'CV/컴퓨터비전': ['영상', '이미지', '비전', '객체인식', '안면', '얼굴', 'CCTV', '카메라', '의료영상'],
+      'GenAI/생성AI': ['생성AI', '생성형', 'GenAI', 'GPT', '파운데이션', '초거대', 'LLM', '거대언어'],
+      'AI반도체': ['AI반도체', 'AI칩', 'NPU', 'PIM', '뉴로모픽', '온디바이스', '칩렛', 'GPU'],
+      '로봇/자율주행': ['로봇', '자율주행', '드론', '무인', '자율차', '모빌리티'],
+      '바이오/헬스AI': ['바이오', '의료', '헬스', '신약', '유전체', '디지털치료', '진단'],
+      '보안AI': ['보안', '사이버', '해킹', '암호', '프라이버시', '개인정보'],
+      '데이터/빅데이터': ['빅데이터', '데이터', '데이터셋', '데이터댐'],
+      '클라우드/엣지': ['클라우드', '엣지', 'SaaS', 'PaaS', 'IaaS'],
+      '양자컴퓨팅': ['양자', '퀀텀'],
+      '디지털트윈/메타버스': ['디지털트윈', '메타버스', 'XR', 'AR', 'VR'],
+      '기타AI': []
+    };
+
+    const RND_STAGES = {
+      '기초연구': ['기초', '원천', '탐색', '이론', '기반'],
+      '응용연구': ['응용', '핵심기술', '원천기술', '요소기술'],
+      '개발': ['개발', '프로토타입', '시제품', '설계'],
+      '실증': ['실증', '시범', '파일럿', '테스트베드', '검증'],
+      '사업화': ['상용화', '확산', '보급', '사업화', '실용화', '양산']
+    };
+
+    const HOT_KEYWORDS = ['생성AI', 'AI반도체', '양자', '디지털트윈', '자율주행', '메타버스', '6G', '초거대AI', '데이터', '클라우드'];
+
+    const DOMAIN_COLORS = [
+      '#2563eb', '#7c3aed', '#ea580c', '#16a34a', '#ca8a04',
+      '#dc2626', '#0891b2', '#db2777', '#6366f1', '#059669',
+      '#d97706', '#64748b'
+    ];
+
+    // ── Helper: search text from project ──
+    function projText(p) {
+      return [
+        p.project_name || p.name || '',
+        p.purpose || '',
+        p.description || '',
+        (p.keywords || []).join(' '),
+        (p.ai_domains || []).join(' ')
+      ].join(' ');
+    }
+
+    // ── Classify projects by tech domain ──
+    const domainMap = {};
+    const domainNames = Object.keys(AI_TECH_DOMAINS);
+    domainNames.forEach(d => { domainMap[d] = []; });
+
+    projects.forEach(p => {
+      const text = projText(p);
+      let matched = false;
+      domainNames.forEach(domain => {
+        const kws = AI_TECH_DOMAINS[domain];
+        if (kws.length === 0) return; // skip 기타AI
+        for (const kw of kws) {
+          if (text.includes(kw)) {
+            domainMap[domain].push(p);
+            matched = true;
+            break;
+          }
+        }
+      });
+      if (!matched) domainMap['기타AI'].push(p);
+    });
+
+    // ── Classify R&D projects by stage ──
+    const rndProjects = projects.filter(p => p.is_rnd);
+    const nonRndProjects = projects.filter(p => !p.is_rnd);
+    const stageMap = {};
+    Object.keys(RND_STAGES).forEach(s => { stageMap[s] = []; });
+
+    rndProjects.forEach(p => {
+      const text = projText(p);
+      let matched = false;
+      for (const [stage, kws] of Object.entries(RND_STAGES)) {
+        for (const kw of kws) {
+          if (text.includes(kw)) {
+            stageMap[stage].push(p);
+            matched = true;
+            break;
+          }
+        }
+        if (matched) break;
+      }
+      if (!matched) stageMap['개발'].push(p); // default
+    });
+
+    // ── Hot topic tracking ──
+    const hotTopics = HOT_KEYWORDS.map(kw => {
+      const matched = projects.filter(p => projText(p).includes(kw));
+      const budget = matched.reduce((s, p) => s + _b26(p), 0);
+      return { keyword: kw, count: matched.length, budget, avgBudget: matched.length > 0 ? budget / matched.length : 0, projects: matched };
+    }).filter(t => t.count > 0);
+
+    // ── Build HTML ──
+    const rndBudget = rndProjects.reduce((s, p) => s + _b26(p), 0);
+    const nonRndBudget = nonRndProjects.reduce((s, p) => s + _b26(p), 0);
+    const totalBudget = rndBudget + nonRndBudget;
+
+    el.innerHTML = `
+      <div class="pc-section">
+        <div class="pc-section-title"><span class="pc-icon">&#9881;</span> AI R&D 분석</div>
+
+        <!-- KPI Row -->
+        <div class="pc-kpi-row">
+          <div class="pc-kpi-item"><div class="pc-kpi-value">${rndProjects.length}</div><div class="pc-kpi-label">R&D 사업 수</div></div>
+          <div class="pc-kpi-item"><div class="pc-kpi-value">${_fmt(rndBudget)}</div><div class="pc-kpi-label">R&D 예산</div></div>
+          <div class="pc-kpi-item"><div class="pc-kpi-value">${totalBudget > 0 ? (rndBudget / totalBudget * 100).toFixed(1) : 0}%</div><div class="pc-kpi-label">R&D 비율</div></div>
+          <div class="pc-kpi-item"><div class="pc-kpi-value">${domainNames.filter(d => domainMap[d].length > 0).length}</div><div class="pc-kpi-label">활성 기술 분야</div></div>
+          <div class="pc-kpi-item"><div class="pc-kpi-value">${hotTopics.length}</div><div class="pc-kpi-label">핫토픽 수</div></div>
+        </div>
+
+        <!-- 1. AI Tech Domain -->
+        <div class="pc-section-title" style="margin-top:24px"><span class="pc-icon">&#128300;</span> AI 기술 분류 체계</div>
+        <div class="pc-grid-2">
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px">기술 분야별 사업 수</div>
+            <div style="position:relative;height:300px"><canvas id="pc-rnd-domain-donut"></canvas></div>
+          </div>
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px">기술 분야별 예산</div>
+            <div style="position:relative;height:300px"><canvas id="pc-rnd-domain-bar"></canvas></div>
+          </div>
+        </div>
+        <div id="pc-rnd-domain-table" style="margin-top:12px"></div>
+
+        <!-- 2. R&D Stage -->
+        <div class="pc-section-title" style="margin-top:28px"><span class="pc-icon">&#128202;</span> R&D 단계별 분석</div>
+        <div class="pc-grid-2">
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px">R&D 파이프라인 (예산 흐름)</div>
+            <div style="position:relative;height:280px"><canvas id="pc-rnd-stage-funnel"></canvas></div>
+          </div>
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px">단계별 사업 수 및 예산</div>
+            <div id="pc-rnd-stage-bars"></div>
+          </div>
+        </div>
+
+        <!-- 3. Hot Topics -->
+        <div class="pc-section-title" style="margin-top:28px"><span class="pc-icon">&#128293;</span> 핫토픽 트래킹</div>
+        <div class="pc-grid-2">
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px">핫토픽 버블 차트</div>
+            <div style="position:relative;height:320px"><canvas id="pc-rnd-hot-bubble"></canvas></div>
+          </div>
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px">핫토픽 카드</div>
+            <div id="pc-rnd-hot-cards" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:320px;overflow-y:auto"></div>
+          </div>
+        </div>
+
+        <!-- 4. Investment Gap -->
+        <div class="pc-section-title" style="margin-top:28px"><span class="pc-icon">&#128200;</span> 투자 갭 분석</div>
+        <div class="pc-grid-2">
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px">R&D vs 비R&D 예산 비율</div>
+            <div style="position:relative;height:260px"><canvas id="pc-rnd-gap-pie"></canvas></div>
+          </div>
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px">투자 분석 요약</div>
+            <div id="pc-rnd-gap-summary"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // ── Render Charts ──
+
+    // 1a. Domain donut chart
+    const domainData = domainNames.filter(d => domainMap[d].length > 0);
+    const domainCounts = domainData.map(d => domainMap[d].length);
+    const domainBudgets = domainData.map(d => domainMap[d].reduce((s, p) => s + _b26(p), 0));
+    const domainColorSlice = domainData.map((_, i) => DOMAIN_COLORS[i % DOMAIN_COLORS.length]);
+
+    _destroy('pc-rnd-domain-donut');
+    const donutCtx = document.getElementById('pc-rnd-domain-donut');
+    if (donutCtx) {
+      const ch = new Chart(donutCtx, {
+        type: 'doughnut',
+        data: {
+          labels: domainData,
+          datasets: [{ data: domainCounts, backgroundColor: domainColorSlice, borderWidth: 0 }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          cutout: '55%',
+          plugins: {
+            legend: { position: 'right', labels: { color: _lbl(), font: { size: 11 }, boxWidth: 12, padding: 6 } },
+            tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw}개 사업` } }
+          }
+        }
+      });
+      if (typeof window.chartInstances !== 'undefined') window.chartInstances['pc-rnd-domain-donut'] = ch;
+    }
+
+    // 1b. Domain budget bar chart
+    _destroy('pc-rnd-domain-bar');
+    const barCtx = document.getElementById('pc-rnd-domain-bar');
+    if (barCtx) {
+      const ch = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: domainData,
+          datasets: [{ label: '예산(억원)', data: domainBudgets.map(b => b / 100), backgroundColor: domainColorSlice, borderRadius: 4 }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          indexAxis: 'y',
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => _fmt(ctx.raw * 100) } }
+          },
+          scales: {
+            x: { ticks: { color: _lbl(), font: { size: 10 } }, grid: { color: _grid() } },
+            y: { ticks: { color: _lbl(), font: { size: 10 } }, grid: { display: false } }
+          }
+        }
+      });
+      if (typeof window.chartInstances !== 'undefined') window.chartInstances['pc-rnd-domain-bar'] = ch;
+    }
+
+    // 1c. Domain detail table
+    const domainTableEl = document.getElementById('pc-rnd-domain-table');
+    if (domainTableEl) {
+      const sortedDomains = domainData.map((d, i) => ({ name: d, count: domainCounts[i], budget: domainBudgets[i] }))
+        .sort((a, b) => b.budget - a.budget);
+      domainTableEl.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px">
+          <table class="pc-heatmap" style="min-width:auto">
+            <thead><tr>
+              <th style="text-align:left">기술 분야</th><th>사업 수</th><th>예산</th><th>비중</th>
+            </tr></thead>
+            <tbody>
+              ${sortedDomains.map(d => {
+                const pct = totalBudget > 0 ? (d.budget / totalBudget * 100).toFixed(1) : '0.0';
+                return `<tr><td style="text-align:left;font-weight:600">${d.name}</td><td>${d.count}</td><td>${_fmt(d.budget)}</td><td>${pct}%</td></tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    // 2a. R&D Stage funnel chart
+    const stageNames = Object.keys(RND_STAGES);
+    const stageCounts = stageNames.map(s => stageMap[s].length);
+    const stageBudgets = stageNames.map(s => stageMap[s].reduce((sum, p) => sum + _b26(p), 0));
+    const stageColors = ['#6366f1', '#8b5cf6', '#a78bfa', '#c4b5fd', '#22d3ee'];
+
+    _destroy('pc-rnd-stage-funnel');
+    const funnelCtx = document.getElementById('pc-rnd-stage-funnel');
+    if (funnelCtx) {
+      const ch = new Chart(funnelCtx, {
+        type: 'bar',
+        data: {
+          labels: stageNames,
+          datasets: [{
+            label: '예산(억원)',
+            data: stageBudgets.map(b => b / 100),
+            backgroundColor: stageColors,
+            borderRadius: 4,
+            barPercentage: 0.7
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => `${ctx.label}: ${_fmt(ctx.raw * 100)}` } }
+          },
+          scales: {
+            x: { ticks: { color: _lbl(), font: { size: 11, weight: '600' } }, grid: { display: false } },
+            y: { ticks: { color: _lbl(), font: { size: 10 }, callback: v => v.toLocaleString() + '억' }, grid: { color: _grid() } }
+          }
+        }
+      });
+      if (typeof window.chartInstances !== 'undefined') window.chartInstances['pc-rnd-stage-funnel'] = ch;
+    }
+
+    // 2b. Stage detail bars
+    const stageBarsEl = document.getElementById('pc-rnd-stage-bars');
+    if (stageBarsEl) {
+      const maxStageBudget = Math.max(...stageBudgets, 1);
+      stageBarsEl.innerHTML = stageNames.map((s, i) => {
+        const pct = (stageBudgets[i] / maxStageBudget * 100).toFixed(0);
+        return `
+          <div class="pc-balance-bar">
+            <div class="pc-balance-label">${s}</div>
+            <div class="pc-balance-track">
+              <div class="pc-balance-fill" style="width:${pct}%;background:${stageColors[i]}">${stageCounts[i]}건</div>
+            </div>
+            <div class="pc-balance-value">${_fmt(stageBudgets[i])}</div>
+          </div>
+        `;
+      }).join('') + `
+        <div style="margin-top:12px;padding:10px;background:var(--bg-secondary);border-radius:8px;font-size:12px;color:var(--text-secondary);line-height:1.6">
+          <strong style="color:var(--text-primary)">R&D 파이프라인 분석:</strong>
+          총 ${rndProjects.length}개 R&D 사업 중
+          기초연구 ${stageCounts[0]}건(${_fmt(stageBudgets[0])}),
+          응용연구 ${stageCounts[1]}건(${_fmt(stageBudgets[1])}),
+          개발 ${stageCounts[2]}건(${_fmt(stageBudgets[2])}),
+          실증 ${stageCounts[3]}건(${_fmt(stageBudgets[3])}),
+          사업화 ${stageCounts[4]}건(${_fmt(stageBudgets[4])})
+        </div>
+      `;
+    }
+
+    // 3a. Hot topic bubble chart
+    _destroy('pc-rnd-hot-bubble');
+    const bubbleCtx = document.getElementById('pc-rnd-hot-bubble');
+    if (bubbleCtx && hotTopics.length > 0) {
+      const maxCount = Math.max(...hotTopics.map(t => t.count));
+      const bubbleData = hotTopics.map((t, i) => ({
+        x: t.count,
+        y: t.budget / 100, // 억원
+        r: Math.max(6, Math.min(30, (t.avgBudget / 100) * 0.5 + 6)),
+        label: t.keyword
+      }));
+      const ch = new Chart(bubbleCtx, {
+        type: 'bubble',
+        data: {
+          datasets: [{
+            label: '핫토픽',
+            data: bubbleData,
+            backgroundColor: hotTopics.map((_, i) => {
+              const c = DOMAIN_COLORS[i % DOMAIN_COLORS.length];
+              return c + '99';
+            }),
+            borderColor: hotTopics.map((_, i) => DOMAIN_COLORS[i % DOMAIN_COLORS.length]),
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const d = ctx.raw;
+                  return `${d.label}: ${d.x}개 사업, ${_fmt(d.y * 100)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { title: { display: true, text: '사업 수', color: _lbl(), font: { size: 11 } }, ticks: { color: _lbl() }, grid: { color: _grid() } },
+            y: { title: { display: true, text: '총 예산(억원)', color: _lbl(), font: { size: 11 } }, ticks: { color: _lbl(), callback: v => v.toLocaleString() }, grid: { color: _grid() } }
+          }
+        }
+      });
+      if (typeof window.chartInstances !== 'undefined') window.chartInstances['pc-rnd-hot-bubble'] = ch;
+    }
+
+    // 3b. Hot topic cards
+    const hotCardsEl = document.getElementById('pc-rnd-hot-cards');
+    if (hotCardsEl) {
+      hotCardsEl.innerHTML = hotTopics.sort((a, b) => b.budget - a.budget).map((t, i) => `
+        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+          <div style="font-size:13px;font-weight:700;color:${DOMAIN_COLORS[i % DOMAIN_COLORS.length]};margin-bottom:4px">${t.keyword}</div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary)">
+            <span>${t.count}개 사업</span>
+            <span style="font-weight:600;color:var(--accent)">${_fmt(t.budget)}</span>
+          </div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">평균 ${_fmt(t.avgBudget)}/사업</div>
+        </div>
+      `).join('');
+    }
+
+    // 4a. R&D vs non-R&D pie
+    _destroy('pc-rnd-gap-pie');
+    const gapPieCtx = document.getElementById('pc-rnd-gap-pie');
+    if (gapPieCtx) {
+      const ch = new Chart(gapPieCtx, {
+        type: 'pie',
+        data: {
+          labels: ['R&D 사업', '비R&D 사업'],
+          datasets: [{
+            data: [rndBudget / 100, nonRndBudget / 100],
+            backgroundColor: ['#6366f1', '#94a3b8'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { color: _lbl(), font: { size: 12 }, padding: 12 } },
+            tooltip: { callbacks: { label: ctx => `${ctx.label}: ${_fmt(ctx.raw * 100)} (${totalBudget > 0 ? (ctx.raw * 100 / totalBudget * 100).toFixed(1) : 0}%)` } }
+          }
+        }
+      });
+      if (typeof window.chartInstances !== 'undefined') window.chartInstances['pc-rnd-gap-pie'] = ch;
+    }
+
+    // 4b. Gap analysis summary
+    const gapSummaryEl = document.getElementById('pc-rnd-gap-summary');
+    if (gapSummaryEl) {
+      const maxStageIdx = stageBudgets.indexOf(Math.max(...stageBudgets));
+      const minStageIdx = stageBudgets.indexOf(Math.min(...stageBudgets.filter(b => b > 0)));
+      const topDomain = domainData.length > 0 ? domainData[domainBudgets.indexOf(Math.max(...domainBudgets))] : '-';
+      const rndPct = totalBudget > 0 ? (rndBudget / totalBudget * 100).toFixed(1) : '0.0';
+
+      gapSummaryEl.innerHTML = `
+        <div style="font-size:12px;color:var(--text-secondary);line-height:1.8">
+          <div style="padding:10px;background:var(--bg-secondary);border-radius:8px;margin-bottom:10px">
+            <div style="font-weight:700;color:var(--text-primary);margin-bottom:6px">R&D 투자 현황</div>
+            <div>전체 ${_fmtN(projects.length)}개 사업 중 <strong style="color:var(--accent)">${rndProjects.length}개(${rndPct}%)</strong>가 R&D 사업</div>
+            <div>R&D 예산 ${_fmt(rndBudget)}, 비R&D 예산 ${_fmt(nonRndBudget)}</div>
+          </div>
+          <div style="padding:10px;background:var(--bg-secondary);border-radius:8px;margin-bottom:10px">
+            <div style="font-weight:700;color:var(--text-primary);margin-bottom:6px">R&D 단계 분포</div>
+            <div>최대 투자 단계: <strong style="color:var(--accent)">${stageNames[maxStageIdx]}</strong> (${_fmt(stageBudgets[maxStageIdx])})</div>
+            ${minStageIdx >= 0 ? `<div>최소 투자 단계: <strong style="color:var(--red)">${stageNames[minStageIdx]}</strong> (${_fmt(stageBudgets[minStageIdx])})</div>` : ''}
+          </div>
+          <div style="padding:10px;background:var(--bg-secondary);border-radius:8px;margin-bottom:10px">
+            <div style="font-weight:700;color:var(--text-primary);margin-bottom:6px">기술 분야 집중도</div>
+            <div>최대 투자 분야: <strong style="color:var(--accent)">${topDomain}</strong></div>
+            <div>활성 기술 분야: ${domainData.length}개 / ${domainNames.length}개</div>
+          </div>
+          <div style="padding:10px;background:var(--bg-secondary);border-radius:8px">
+            <div style="font-weight:700;color:var(--text-primary);margin-bottom:6px">투자 갭 시사점</div>
+            <div>${rndPct > 50 ? 'R&D 중심의 투자 구조로, 연구 성과의 사업화 연계가 중요합니다.' : '비R&D 비중이 높아, 기초-응용 R&D 투자 확대 검토가 필요합니다.'}</div>
+            <div>${stageBudgets[4] < stageBudgets[0] ? '기초연구 대비 사업화 단계 투자가 적어, 기술 이전 및 상용화 지원 강화가 필요합니다.' : '사업화 단계 투자가 충분하여, 실제 시장 성과 창출이 기대됩니다.'}</div>
+          </div>
         </div>
       `;
     }

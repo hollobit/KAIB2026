@@ -301,6 +301,7 @@ function initFutureSimTab(DATA) {
           <button class="fs-inner-tab" data-panel="scenario">AI 기술 동향 시뮬레이션</button>
           <button class="fs-inner-tab" data-panel="whatif">What-if 시나리오</button>
           <button class="fs-inner-tab" data-panel="intl">국제 비교</button>
+          <button class="fs-inner-tab" data-panel="dedup">중복 통합</button>
         </div>
 
         <!-- Panel: Forecast -->
@@ -457,6 +458,43 @@ function initFutureSimTab(DATA) {
             </div>
           </div>
         </div>
+
+        <!-- Panel: Dedup Simulation -->
+        <div class="fs-inner-panel" id="fs-panel-dedup">
+          <div class="fs-kpi-row" id="fs-dedup-kpi"></div>
+          <div class="fs-card" style="margin-top:20px">
+            <div class="fs-card-title">
+              <span class="icon">&#x1F501;</span> 중복사업 통합 시뮬레이션
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+              <button class="fs-action-btn primary" id="fs-dedup-select-all">전체 선택</button>
+              <button class="fs-action-btn" id="fs-dedup-deselect-all">전체 해제</button>
+              <div class="fs-slider-item" style="flex:1;min-width:200px;max-width:400px;">
+                <div class="fs-slider-label">
+                  <span>축소 비율</span>
+                  <span class="fs-slider-value" id="fs-dedup-ratio-val">50%</span>
+                </div>
+                <input type="range" class="fs-slider-input" id="fs-dedup-ratio" min="30" max="70" value="50" step="5">
+                <div class="fs-slider-budget">통합 후 하위사업 예산을 이 비율로 축소</div>
+              </div>
+            </div>
+            <div id="fs-dedup-groups"></div>
+          </div>
+          <div class="fs-card" style="margin-top:20px">
+            <div class="fs-card-title">
+              <span class="icon">&#x1F4B0;</span> 절감액 재배분 시나리오
+            </div>
+            <div id="fs-dedup-redistribute"></div>
+          </div>
+          <div class="fs-card" style="margin-top:20px">
+            <div class="fs-card-title">
+              <span class="icon">&#x1F4CA;</span> 부처별 현재 vs 시뮬레이션 비교
+            </div>
+            <div class="fs-chart-wrapper">
+              <canvas id="fs-chart-dedup-compare"></canvas>
+            </div>
+          </div>
+        </div>
       </div>
     `;
 
@@ -529,6 +567,7 @@ function initFutureSimTab(DATA) {
       case 'scenario': renderScenarioPanel(); break;
       case 'whatif': renderWhatIfPanel(); break;
       case 'intl': renderIntlPanel(); break;
+      case 'dedup': renderDedupPanel(); break;
     }
   }
 
@@ -1719,6 +1758,375 @@ function initFutureSimTab(DATA) {
         }
       }
     });
+  }
+
+  // ──────────────────────────────────────────────
+  // 6E. DEDUP CONSOLIDATION PANEL
+  // ──────────────────────────────────────────────
+
+  const dedupState = { checked: new Set(), ratio: 50, redistMode: 'equal' };
+
+  function getDuplicateGroups() {
+    return DATA.analysis?.duplicates || [];
+  }
+
+  function renderDedupPanel() {
+    const groups = getDuplicateGroups();
+    if (!groups.length) {
+      const el = document.getElementById('fs-dedup-groups');
+      if (el) el.innerHTML = '<p style="color:var(--text-muted);">중복사업 데이터가 없습니다.</p>';
+      return;
+    }
+
+    renderDedupKPI(groups);
+    renderDedupGroups(groups);
+    renderDedupRedistribute(groups);
+    renderDedupCompareChart(groups);
+    bindDedupEvents(groups);
+  }
+
+  function calcDedupSavings(groups) {
+    const ratio = dedupState.ratio / 100;
+    let totalSavings = 0;
+    let totalOriginal = 0;
+
+    groups.forEach((g, i) => {
+      if (!dedupState.checked.has(i)) {
+        totalOriginal += g.total_budget || 0;
+        return;
+      }
+      const sorted = [...(g.projects || [])].sort((a, b) => (b.budget_2026 || 0) - (a.budget_2026 || 0));
+      sorted.forEach((p, j) => {
+        const b = p.budget_2026 || 0;
+        totalOriginal += b;
+        if (j > 0) {
+          totalSavings += b * ratio;
+        }
+      });
+    });
+
+    return { totalSavings, totalOriginal, totalAfter: totalOriginal - totalSavings };
+  }
+
+  function renderDedupKPI(groups) {
+    const el = document.getElementById('fs-dedup-kpi');
+    if (!el) return;
+
+    const { totalSavings, totalOriginal, totalAfter } = calcDedupSavings(groups);
+    const savingsRate = totalOriginal > 0 ? (totalSavings / totalOriginal * 100) : 0;
+
+    el.innerHTML = `
+      <div class="fs-kpi-card fs-animate">
+        <div class="fs-kpi-icon blue">&#x1F501;</div>
+        <div class="fs-kpi-label">중복사업 그룹</div>
+        <div class="fs-kpi-value">${groups.length}개</div>
+        <div class="fs-kpi-sub neutral">선택: ${dedupState.checked.size}개</div>
+      </div>
+      <div class="fs-kpi-card fs-animate fs-animate-delay-1">
+        <div class="fs-kpi-icon red">&#x1F4B8;</div>
+        <div class="fs-kpi-label">총 절감액</div>
+        <div class="fs-kpi-value">${fmtB(totalSavings)}</div>
+        <div class="fs-kpi-sub ${savingsRate > 0 ? 'positive' : 'neutral'}">${savingsRate.toFixed(1)}% 절감</div>
+      </div>
+      <div class="fs-kpi-card fs-animate fs-animate-delay-2">
+        <div class="fs-kpi-icon green">&#x1F4B0;</div>
+        <div class="fs-kpi-label">통합 후 총예산</div>
+        <div class="fs-kpi-value">${fmtB(totalAfter)}</div>
+        <div class="fs-kpi-sub neutral">현재: ${fmtB(totalOriginal)}</div>
+      </div>
+      <div class="fs-kpi-card fs-animate fs-animate-delay-3">
+        <div class="fs-kpi-icon purple">&#x2699;</div>
+        <div class="fs-kpi-label">축소 비율</div>
+        <div class="fs-kpi-value">${dedupState.ratio}%</div>
+        <div class="fs-kpi-sub neutral">하위사업 예산 축소율</div>
+      </div>
+    `;
+  }
+
+  function renderDedupGroups(groups) {
+    const el = document.getElementById('fs-dedup-groups');
+    if (!el) return;
+
+    const ratio = dedupState.ratio / 100;
+    let html = '<div style="display:flex;flex-direction:column;gap:12px;">';
+
+    groups.forEach((g, i) => {
+      const checked = dedupState.checked.has(i);
+      const sorted = [...(g.projects || [])].sort((a, b) => (b.budget_2026 || 0) - (a.budget_2026 || 0));
+      let groupSavings = 0;
+      if (checked) {
+        sorted.forEach((p, j) => { if (j > 0) groupSavings += (p.budget_2026 || 0) * ratio; });
+      }
+
+      html += `
+        <div class="fs-dedup-group-card" style="background:var(--bg-primary);border:1px solid ${checked ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);padding:16px;transition:border-color 0.2s;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
+              <input type="checkbox" class="fs-dedup-check" data-idx="${i}" ${checked ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
+              <span style="font-weight:700;color:var(--text-primary);font-size:0.95rem;">${g.group_name}</span>
+            </label>
+            <span style="font-size:0.75rem;padding:3px 10px;border-radius:20px;background:var(--accent-dim);color:var(--accent);font-weight:600;">${g.project_count}개 사업</span>
+            <span style="font-size:0.85rem;font-weight:700;color:var(--text-primary);">${fmtB(g.total_budget)}</span>
+            ${checked ? `<span style="font-size:0.8rem;color:var(--green);font-weight:700;">-${fmtB(groupSavings)}</span>` : ''}
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+            ${(g.departments || []).map(d => `<span style="font-size:0.72rem;padding:2px 8px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border);color:var(--text-secondary);">${d}</span>`).join('')}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            ${sorted.map((p, j) => {
+              const b = p.budget_2026 || 0;
+              const isLargest = j === 0;
+              const afterB = checked ? (isLargest ? b : b * (1 - ratio)) : b;
+              const barW = g.total_budget > 0 ? (b / g.total_budget * 100) : 0;
+              const afterW = g.total_budget > 0 ? (afterB / g.total_budget * 100) : 0;
+              return `
+                <div style="display:flex;align-items:center;gap:8px;font-size:0.8rem;padding:4px 0;">
+                  <span style="min-width:14px;color:${isLargest && checked ? 'var(--accent)' : 'var(--text-muted)'};font-weight:700;">${isLargest && checked ? '★' : (j+1)}</span>
+                  <span style="flex:1;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;" title="${p.name}">${p.name}</span>
+                  <span style="color:var(--text-muted);min-width:80px;font-size:0.72rem;">${p.department}</span>
+                  <span style="min-width:70px;text-align:right;font-weight:600;color:var(--text-primary);">${fmtB(b)}</span>
+                  ${checked ? `
+                    <span style="color:var(--text-muted);">→</span>
+                    <span style="min-width:70px;text-align:right;font-weight:700;color:${isLargest ? 'var(--accent)' : 'var(--green)'};">${fmtB(afterB)}</span>
+                  ` : ''}
+                  <div style="width:80px;height:6px;border-radius:3px;background:var(--border);overflow:hidden;position:relative;">
+                    <div style="position:absolute;height:100%;border-radius:3px;background:${checked && !isLargest ? 'var(--green)' : 'var(--accent)'};width:${checked ? afterW : barW}%;transition:width 0.4s;"></div>
+                    ${checked && !isLargest ? `<div style="position:absolute;height:100%;border-radius:3px;background:var(--red);opacity:0.3;width:${barW}%;"></div>` : ''}
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+    });
+
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  function renderDedupRedistribute(groups) {
+    const el = document.getElementById('fs-dedup-redistribute');
+    if (!el) return;
+
+    const { totalSavings } = calcDedupSavings(groups);
+    if (totalSavings <= 0) {
+      el.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">통합 대상 그룹을 선택하면 절감액 재배분 시나리오를 확인할 수 있습니다.</p>';
+      return;
+    }
+
+    const fields = ['R&D', 'AI반도체', '생성AI', '자율주행', '스마트시티'];
+
+    el.innerHTML = `
+      <div style="margin-bottom:16px;">
+        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px;">절감액 <strong style="color:var(--green);">${fmtB(totalSavings)}</strong>을 재배분합니다.</p>
+        <div class="fs-model-group" id="fs-redist-mode">
+          <button class="fs-model-option ${dedupState.redistMode === 'equal' ? 'active' : ''}" data-mode="equal">균등배분</button>
+          <button class="fs-model-option ${dedupState.redistMode === 'proportional' ? 'active' : ''}" data-mode="proportional">비중배분</button>
+          <button class="fs-model-option ${dedupState.redistMode === 'focused' ? 'active' : ''}" data-mode="focused">특정 분야 집중</button>
+        </div>
+        ${dedupState.redistMode === 'focused' ? `
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+            ${fields.map(f => `<span class="fs-dedup-field-chip" style="padding:4px 12px;border-radius:16px;background:var(--accent-dim);color:var(--accent);font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid var(--accent);">${f}</span>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+      <div id="fs-redist-preview" style="margin-top:12px;"></div>
+    `;
+
+    renderRedistPreview(groups, totalSavings);
+
+    document.querySelectorAll('#fs-redist-mode .fs-model-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        dedupState.redistMode = btn.dataset.mode;
+        renderDedupRedistribute(groups);
+        renderDedupCompareChart(groups);
+      });
+    });
+  }
+
+  function getRedistribution(groups, totalSavings) {
+    const deptBudgets = {};
+    projects.forEach(p => {
+      const d = p.department;
+      if (!deptBudgets[d]) deptBudgets[d] = 0;
+      deptBudgets[d] += getB26(p);
+    });
+
+    const depts = Object.keys(deptBudgets).sort((a, b) => deptBudgets[b] - deptBudgets[a]);
+    const totalAll = Object.values(deptBudgets).reduce((s, v) => s + v, 0);
+    const result = {};
+
+    if (dedupState.redistMode === 'equal') {
+      const perDept = totalSavings / depts.length;
+      depts.forEach(d => { result[d] = perDept; });
+    } else if (dedupState.redistMode === 'proportional') {
+      depts.forEach(d => {
+        result[d] = totalAll > 0 ? totalSavings * (deptBudgets[d] / totalAll) : 0;
+      });
+    } else {
+      // focused: top 5 departments get most
+      const topN = depts.slice(0, 5);
+      const topTotal = topN.reduce((s, d) => s + deptBudgets[d], 0);
+      depts.forEach(d => {
+        if (topN.includes(d)) {
+          result[d] = topTotal > 0 ? totalSavings * (deptBudgets[d] / topTotal) : 0;
+        } else {
+          result[d] = 0;
+        }
+      });
+    }
+
+    return { deptBudgets, result, depts };
+  }
+
+  function renderRedistPreview(groups, totalSavings) {
+    const el = document.getElementById('fs-redist-preview');
+    if (!el) return;
+
+    const { deptBudgets, result, depts } = getRedistribution(groups, totalSavings);
+    const top10 = depts.slice(0, 10);
+
+    let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;">';
+    top10.forEach(d => {
+      const orig = deptBudgets[d] || 0;
+      const add = result[d] || 0;
+      const afterVal = orig + add;
+      const pct = orig > 0 ? (add / orig * 100) : 0;
+      html += `
+        <div style="padding:10px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;font-size:0.8rem;">
+          <div style="font-weight:700;color:var(--text-primary);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d}</div>
+          <div style="display:flex;justify-content:space-between;color:var(--text-secondary);">
+            <span>현재: ${fmtB(orig)}</span>
+            <span style="color:var(--green);font-weight:700;">+${fmtB(add)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:2px;">
+            <span style="color:var(--accent);font-weight:700;">→ ${fmtB(afterVal)}</span>
+            <span style="color:var(--green);font-size:0.75rem;">(+${pct.toFixed(1)}%)</span>
+          </div>
+        </div>`;
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  function renderDedupCompareChart(groups) {
+    const { totalSavings } = calcDedupSavings(groups);
+    if (totalSavings <= 0) {
+      destroyFsChart('fs-chart-dedup-compare');
+      return;
+    }
+
+    const { deptBudgets, result, depts } = getRedistribution(groups, totalSavings);
+
+    // Compute per-dept savings from consolidation
+    const deptSavings = {};
+    const ratio = dedupState.ratio / 100;
+    groups.forEach((g, i) => {
+      if (!dedupState.checked.has(i)) return;
+      const sorted = [...(g.projects || [])].sort((a, b) => (b.budget_2026 || 0) - (a.budget_2026 || 0));
+      sorted.forEach((p, j) => {
+        if (j > 0) {
+          const d = p.department;
+          if (!deptSavings[d]) deptSavings[d] = 0;
+          deptSavings[d] += (p.budget_2026 || 0) * ratio;
+        }
+      });
+    });
+
+    const top10 = depts.slice(0, 10);
+    const currentVals = top10.map(d => (deptBudgets[d] || 0) / 100);
+    const afterVals = top10.map(d => {
+      const orig = deptBudgets[d] || 0;
+      const saved = deptSavings[d] || 0;
+      const added = result[d] || 0;
+      return (orig - saved + added) / 100;
+    });
+
+    createChart('fs-chart-dedup-compare', {
+      type: 'bar',
+      data: {
+        labels: top10.map(d => d.length > 8 ? d.slice(0, 8) + '..' : d),
+        datasets: [
+          {
+            label: '현재 예산',
+            data: currentVals,
+            backgroundColor: 'rgba(74,158,255,0.6)',
+            borderColor: '#4a9eff',
+            borderWidth: 1
+          },
+          {
+            label: '통합 후 예산',
+            data: afterVals,
+            backgroundColor: 'rgba(52,211,153,0.6)',
+            borderColor: '#34d399',
+            borderWidth: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: { color: labelColor(), boxWidth: 12, font: { size: 11 } }
+          },
+          tooltip: {
+            callbacks: {
+              label: ctx => `${ctx.dataset.label}: ${fmtB(ctx.raw * 100)}`
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { color: labelColor(), font: { size: 10 } }, grid: { color: gridColor() } },
+          y: {
+            ticks: { color: labelColor(), callback: v => fmtB(v * 100) },
+            grid: { color: gridColor() }
+          }
+        }
+      }
+    });
+  }
+
+  function bindDedupEvents(groups) {
+    // Checkbox events
+    document.querySelectorAll('.fs-dedup-check').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const idx = parseInt(cb.dataset.idx);
+        if (cb.checked) dedupState.checked.add(idx);
+        else dedupState.checked.delete(idx);
+        renderDedupPanel();
+      });
+    });
+
+    // Select all / deselect all
+    const selectAll = document.getElementById('fs-dedup-select-all');
+    const deselectAll = document.getElementById('fs-dedup-deselect-all');
+    if (selectAll) {
+      selectAll.addEventListener('click', () => {
+        groups.forEach((_, i) => dedupState.checked.add(i));
+        renderDedupPanel();
+      });
+    }
+    if (deselectAll) {
+      deselectAll.addEventListener('click', () => {
+        dedupState.checked.clear();
+        renderDedupPanel();
+      });
+    }
+
+    // Ratio slider
+    const slider = document.getElementById('fs-dedup-ratio');
+    const sliderVal = document.getElementById('fs-dedup-ratio-val');
+    if (slider) {
+      slider.addEventListener('input', () => {
+        dedupState.ratio = parseInt(slider.value);
+        if (sliderVal) sliderVal.textContent = dedupState.ratio + '%';
+        renderDedupKPI(groups);
+        renderDedupGroups(groups);
+        renderDedupRedistribute(groups);
+        renderDedupCompareChart(groups);
+      });
+    }
   }
 
   // ──────────────────────────────────────────────

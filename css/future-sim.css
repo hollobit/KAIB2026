@@ -676,6 +676,11 @@
   }
 }
 
+/* Dedup group cards */
+.fs-dedup-group-card:hover {
+  border-color: var(--accent) !important;
+}
+
 /* Animation */
 @keyframes fs-fadeIn {
   from { opacity: 0; transform: translateY(10px); }

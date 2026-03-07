@@ -563,3 +563,33 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* AI R&D Analysis sub-tab */
+#pc-ai-rnd .pc-kpi-row {
+  margin-bottom: 20px;
+}
+
+#pc-ai-rnd .pc-balance-bar {
+  margin-bottom: 8px;
+}
+
+#pc-ai-rnd .pc-balance-fill {
+  font-size: 11px;
+  min-width: 40px;
+}
+
+#pc-rnd-hot-cards > div:hover {
+  border-color: rgba(74,158,255,0.3);
+  transform: translateY(-1px);
+  transition: all 0.2s;
+}
+
+#pc-rnd-domain-table .pc-heatmap td {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 768px) {
+  #pc-rnd-hot-cards {
+    grid-template-columns: 1fr !important;
+  }
+}
