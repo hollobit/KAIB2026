@@ -254,6 +254,7 @@
         <button class="pc-sub-tab" data-subtab="performance">성과 연계 분석</button>
         <button class="pc-sub-tab" data-subtab="recommendations">정책 제언</button>
         <button class="pc-sub-tab" data-subtab="ai-pure">AI 순예산</button>
+        <button class="pc-sub-tab" data-subtab="non-ai">비AI 추정 예산</button>
       </div>
 
       <!-- KPI summary -->
@@ -265,6 +266,7 @@
       <div class="pc-sub-content" id="pc-performance"></div>
       <div class="pc-sub-content" id="pc-recommendations"></div>
       <div class="pc-sub-content" id="pc-ai-pure"></div>
+      <div class="pc-sub-content" id="pc-non-ai"></div>
     `;
 
     // Sub-tab click handlers
@@ -282,6 +284,7 @@
     _pendingRenders['performance'] = () => renderPerformance(projects, themeMap, classMap);
     renderRecommendations(projects, themeMap, classMap);
     _pendingRenders['ai-pure'] = () => renderAiPureBudget(projects);
+    _pendingRenders['non-ai'] = () => renderNonAiBudget(projects);
   }
 
   // ══════════════════════════════════════════════════════════
@@ -1555,6 +1558,614 @@
     document.getElementById('pc-ai-search')?.addEventListener('input', () => { clearTimeout(window._aiSearchTimer); window._aiSearchTimer = setTimeout(renderAiTable, 300); });
     document.getElementById('pc-ai-dept-filter')?.addEventListener('change', renderAiTable);
     document.getElementById('pc-ai-kw-filter')?.addEventListener('change', renderAiTable);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 6. 비AI 추정 예산 SUB-TAB
+  // ══════════════════════════════════════════════════════════
+
+  // AI 관련성을 판별하는 핵심 키워드 (넓은 범위)
+  const AI_BROAD_KEYWORDS = [
+    // 직접 AI
+    'AI', 'AX', '인공지능', 'LLM', 'GPT', '생성형', '초거대', '딥러닝', '머신러닝',
+    '자연어처리', '언어모델', 'sLM', 'NPU', '에이전트', 'Agent', '온디바이스',
+    '파운데이션모델', '휴머노이드',
+    // 데이터/클라우드
+    '빅데이터', '데이터', '클라우드', 'GPU', '컴퓨팅', '슈퍼컴퓨터',
+    '데이터센터', '학습데이터', '데이터셋',
+    // 기술 영역
+    '자율주행', '자율운항', '자율비행', '로봇', '드론', '무인', '스마트팩토리',
+    '스마트팜', '스마트시티', '디지털트윈', '메타버스', '블록체인',
+    'IoT', '사물인터넷', 'XR', 'AR', 'VR',
+    // 반도체/양자
+    '반도체', '양자', '칩렛', 'PIM', '뉴로모픽',
+    // 바이오/의료 AI
+    '바이오빅데이터', '디지털헬스', '정밀의료', '의료AI',
+    // 보안/안전 AI
+    'AI보안', 'AI안전', '사이버보안', '정보보호',
+    // 정보화/디지털 전환
+    '정보화', '디지털전환', 'DX', 'ICT', '전자정부', '지능형',
+    '스마트', '플랫폼', '정보시스템', '전산'
+  ];
+
+  // 비AI 판정을 위한 "제외 사유" 카테고리
+  const NON_AI_REASONS = [
+    {
+      id: 'loan_fund',
+      name: '융자/펀드/출자',
+      desc: '금융성 사업(융자, 펀드, 출자)으로 AI 기술 개발·활용과 직접적 관련이 낮음',
+      keywords: ['융자', '펀드', '출자', '모태조합', '보증']
+    },
+    {
+      id: 'education_general',
+      name: '일반 교육/훈련',
+      desc: 'AI 특화가 아닌 일반 교육·훈련·인력 양성 사업',
+      keywords: ['내일배움', '직업훈련', '장학', '국립대학', '대학육성', '등록금', '급식']
+    },
+    {
+      id: 'construction',
+      name: '시설/건축/토목',
+      desc: 'AI와 관련 없는 건축·시설·인프라 건설 사업',
+      keywords: ['건축', '청사', '이전', '시설비', '임차', '리모델링', '증축', '건립']
+    },
+    {
+      id: 'welfare',
+      name: '일반 복지/지원금',
+      desc: 'AI 기술과 직접 관련 없는 복지·수당·보조금 사업',
+      keywords: ['수당', '보조금', '바우처', '급여', '연금', '보험료', '의료비']
+    },
+    {
+      id: 'admin_ops',
+      name: '일반 행정/운영',
+      desc: 'AI 관련 없는 기관 운영비, 인건비, 일반 행정 사업',
+      keywords: ['운영비', '인건비', '경상운영', '기본경비', '여비', '업무추진']
+    },
+    {
+      id: 'no_keyword',
+      name: 'AI 키워드 미검출',
+      desc: '사업명·내역사업명·사업목적에서 AI 관련 키워드가 전혀 발견되지 않음',
+      keywords: []
+    }
+  ];
+
+  // Field-level AI relevance check
+  const AI_FIELDS = [
+    { id: 'name',        label: '사업명',      extract: p => (p.project_name || p.name || '') },
+    { id: 'sub',         label: '내역사업명',  extract: p => (p.sub_projects || []).map(s => s.name || '').join(' ') },
+    { id: 'program',     label: '프로그램',    extract: p => (p.program?.name || '') + ' ' + (p.unit_project?.name || '') + ' ' + (p.detail_project?.name || '') },
+    { id: 'purpose',     label: '사업목적',    extract: p => (p.purpose || '') },
+    { id: 'description', label: '사업내용',    extract: p => (p.description || '') },
+    { id: 'legal',       label: '법적근거',    extract: p => (p.legal_basis || '') },
+    { id: 'domains',     label: 'AI도메인',    extract: p => (p.ai_domains || []).join(' ') + ' ' + (p.keywords || []).join(' ') },
+    { id: 'field',       label: '분야/부문',   extract: p => (p.field || '') + ' ' + (p.sector || '') }
+  ];
+
+  function _findKwInText(text) {
+    const upper = text.toUpperCase();
+    const found = [];
+    for (const kw of AI_BROAD_KEYWORDS) {
+      if (upper.includes(kw.toUpperCase())) found.push(kw);
+    }
+    return found;
+  }
+
+  function scoreAiRelevance(p) {
+    // Per-field analysis
+    const fieldResults = {};
+    let allMatched = [];
+    for (const f of AI_FIELDS) {
+      const text = f.extract(p);
+      const kws = _findKwInText(text);
+      fieldResults[f.id] = { label: f.label, keywords: kws, hasText: text.trim().length > 0 };
+      kws.forEach(kw => { if (!allMatched.includes(kw)) allMatched.push(kw); });
+    }
+
+    const matchCount = allMatched.length;
+
+    // Determine non-AI reason
+    let reason = null;
+    const nameAndPurpose = ((p.project_name || '') + ' ' + (p.purpose || '') + ' ' +
+      (p.sub_projects || []).map(s => s.name || '').join(' ')).toUpperCase();
+
+    for (const r of NON_AI_REASONS) {
+      if (r.id === 'no_keyword') continue;
+      for (const kw of r.keywords) {
+        if (nameAndPurpose.includes(kw.toUpperCase())) {
+          reason = r;
+          break;
+        }
+      }
+      if (reason) break;
+    }
+
+    if (matchCount === 0) {
+      reason = reason || NON_AI_REASONS.find(r => r.id === 'no_keyword');
+    }
+
+    return { matchCount, matched: allMatched, reason, fieldResults };
+  }
+
+  function renderNonAiBudget(projects) {
+    const el = document.getElementById('pc-non-ai');
+    if (!el) return;
+
+    // Score all projects
+    const scored = projects.map(p => {
+      const s = scoreAiRelevance(p);
+      return { ...p, aiScore: s.matchCount, aiMatched: s.matched, nonAiReason: s.reason, fieldResults: s.fieldResults };
+    });
+
+    // Non-AI = zero AI keyword matches
+    const nonAi = scored.filter(p => p.aiScore === 0);
+    // Low-AI = 1~2 matches (borderline)
+    const lowAi = scored.filter(p => p.aiScore >= 1 && p.aiScore <= 2);
+
+    const nonAiBudget = nonAi.reduce((s, p) => s + _b26(p), 0);
+    const lowAiBudget = lowAi.reduce((s, p) => s + _b26(p), 0);
+    const totalBudget = projects.reduce((s, p) => s + _b26(p), 0);
+    const highAiBudget = totalBudget - nonAiBudget - lowAiBudget;
+    const nonAiPct = totalBudget > 0 ? (nonAiBudget / totalBudget * 100) : 0;
+
+    // Categorize non-AI by reason
+    const reasonMap = {};
+    NON_AI_REASONS.forEach(r => { reasonMap[r.id] = { ...r, projects: [], budget: 0 }; });
+    nonAi.forEach(p => {
+      const rid = p.nonAiReason ? p.nonAiReason.id : 'no_keyword';
+      if (reasonMap[rid]) {
+        reasonMap[rid].projects.push(p);
+        reasonMap[rid].budget += _b26(p);
+      }
+    });
+    const reasonRank = Object.values(reasonMap).filter(r => r.projects.length > 0)
+      .sort((a, b) => b.budget - a.budget);
+
+    // Department aggregation for non-AI
+    const deptMap = {};
+    nonAi.forEach(p => {
+      const d = p.department;
+      if (!deptMap[d]) deptMap[d] = { count: 0, budget: 0, totalBudget: 0 };
+      deptMap[d].count++;
+      deptMap[d].budget += _b26(p);
+    });
+    projects.forEach(p => {
+      const d = p.department;
+      if (deptMap[d]) deptMap[d].totalBudget += _b26(p);
+    });
+    const deptRank = Object.entries(deptMap)
+      .map(([dept, v]) => ({ dept, ...v, ratio: v.totalBudget > 0 ? (v.budget / v.totalBudget * 100) : 0 }))
+      .sort((a, b) => b.budget - a.budget);
+
+    // Build HTML
+    el.innerHTML = `
+      <div class="pc-section">
+        <div class="pc-section-title"><span class="pc-icon" style="background:var(--red-dim);color:var(--red)">!</span> 비AI 추정 예산 분석</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.8;padding:12px 14px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--border)">
+          <strong style="color:var(--red)">분석 목적</strong><br>
+          본 데이터셋은 "AI 재정사업"으로 분류된 533개 사업이지만, 실제로는 AI 기술과 직접적 관련이 낮은 사업이 포함되어 있을 수 있습니다.
+          사업명·내역사업명·사업목적에서 <strong>${AI_BROAD_KEYWORDS.length}개 AI 키워드</strong>(${AI_BROAD_KEYWORDS.slice(0, 10).join(', ')} 등)를 검색하여,
+          <strong style="color:var(--red)">키워드가 전혀 매칭되지 않는 사업</strong>을 비AI 추정 사업으로 분류합니다.<br>
+          <span style="color:var(--text-muted);font-size:11px">※ 키워드 매칭 기반 추정이므로 실제 AI 활용 여부와 다를 수 있습니다. 1~2개만 매칭되는 사업은 "저관련 경계" 사업으로 별도 표시합니다.</span>
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div class="pc-kpi-row" id="pc-nonai-kpi"></div>
+
+      <!-- Reason breakdown + Dept chart -->
+      <div class="pc-grid-2">
+        <div class="card">
+          <div class="card-title">비AI 추정 사유별 분류</div>
+          <div class="chart-container" style="height:360px"><canvas id="pc-nonai-reason-chart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">부처별 비AI 추정 예산 (상위 15)</div>
+          <div class="chart-container" style="height:360px"><canvas id="pc-nonai-dept-chart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="pc-grid-2">
+        <div class="card">
+          <div class="card-title">AI 관련도 분포 (전체 533개 사업)</div>
+          <div class="chart-container" style="height:320px"><canvas id="pc-nonai-dist-chart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">예산 구성: AI vs 비AI</div>
+          <div class="chart-container" style="height:320px"><canvas id="pc-nonai-pie-chart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Reason detail cards -->
+      <div class="pc-section" style="margin-top:16px">
+        <div class="pc-section-title"><span class="pc-icon" style="background:var(--yellow-dim);color:var(--yellow)">?</span> 사유별 상세 설명</div>
+        <div class="pc-rec-cards" id="pc-nonai-reason-cards"></div>
+      </div>
+
+      <!-- Detail table -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="color:var(--red)">비AI 추정 사업 목록 (${nonAi.length}건)</span>
+          <input type="text" id="pc-nonai-search" placeholder="검색..." style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:12px;width:180px">
+          <select id="pc-nonai-dept-filter" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:12px">
+            <option value="">전체 부처</option>
+            ${deptRank.map(d => `<option value="${d.dept}">${d.dept} (${d.count}건)</option>`).join('')}
+          </select>
+          <select id="pc-nonai-reason-filter" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:12px">
+            <option value="">전체 사유</option>
+            ${reasonRank.map(r => `<option value="${r.id}">${r.name} (${r.projects.length}건)</option>`).join('')}
+          </select>
+        </div>
+        <div id="pc-nonai-table-wrap" style="overflow-x:auto;margin-top:8px"></div>
+        <div id="pc-nonai-table-summary" style="font-size:12px;color:var(--text-secondary);margin-top:6px"></div>
+      </div>
+
+      <!-- Low-AI borderline -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-title" style="color:var(--yellow)">저관련 경계 사업 (AI 키워드 1~2개 매칭, ${lowAi.length}건, ${_fmt(lowAiBudget)})</div>
+        <div id="pc-lowai-table-wrap" style="overflow-x:auto;margin-top:8px"></div>
+      </div>
+    `;
+
+    // ── KPI ──
+    const kpiEl = document.getElementById('pc-nonai-kpi');
+    if (kpiEl) {
+      kpiEl.innerHTML = `
+        <div class="pc-kpi-item"><div class="pc-kpi-value" style="color:var(--red)">${nonAi.length}건</div><div class="pc-kpi-label">비AI 추정 사업</div></div>
+        <div class="pc-kpi-item"><div class="pc-kpi-value" style="color:var(--red)">${_fmt(nonAiBudget)}</div><div class="pc-kpi-label">비AI 추정 예산</div></div>
+        <div class="pc-kpi-item"><div class="pc-kpi-value">${nonAiPct.toFixed(1)}%</div><div class="pc-kpi-label">전체 대비 비중</div></div>
+        <div class="pc-kpi-item"><div class="pc-kpi-value" style="color:var(--yellow)">${lowAi.length}건</div><div class="pc-kpi-label">저관련 경계 사업</div></div>
+        <div class="pc-kpi-item"><div class="pc-kpi-value" style="color:var(--yellow)">${_fmt(lowAiBudget)}</div><div class="pc-kpi-label">저관련 경계 예산</div></div>
+        <div class="pc-kpi-item"><div class="pc-kpi-value" style="color:var(--green)">${_fmt(highAiBudget)}</div><div class="pc-kpi-label">AI 관련 예산 (3+)</div></div>
+      `;
+    }
+
+    // ── Reason chart (horizontal bar) ──
+    const reasonColors = ['#dc2626', '#ea580c', '#ca8a04', '#7c3aed', '#0891b2', '#6b7280'];
+    pcCharts['nonai-reason'] = new Chart(document.getElementById('pc-nonai-reason-chart'), {
+      type: 'bar',
+      data: {
+        labels: reasonRank.map(r => r.name),
+        datasets: [{
+          label: '예산 (백만원)',
+          data: reasonRank.map(r => r.budget),
+          backgroundColor: reasonRank.map((_, i) => reasonColors[i % reasonColors.length] + 'aa'),
+          borderRadius: 4
+        }, {
+          label: '사업 수',
+          data: reasonRank.map(r => r.projects.length),
+          type: 'line',
+          borderColor: '#a78bfa',
+          pointBackgroundColor: '#a78bfa',
+          borderWidth: 2,
+          yAxisID: 'y1'
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: _lbl(), callback: v => _fmt(v) }, grid: { color: _grid() } },
+          y: { ticks: { color: _lbl(), font: { size: 11 } }, grid: { display: false } },
+          y1: { display: false }
+        },
+        plugins: {
+          legend: { labels: { color: _lbl(), font: { size: 11 } } },
+          tooltip: { callbacks: { label: ctx => ctx.datasetIndex === 0 ? `예산: ${_fmt(ctx.raw)}` : `${ctx.raw}건` } }
+        }
+      }
+    });
+
+    // ── Dept chart ──
+    const top15d = deptRank.slice(0, 15);
+    pcCharts['nonai-dept'] = new Chart(document.getElementById('pc-nonai-dept-chart'), {
+      type: 'bar',
+      data: {
+        labels: top15d.map(d => d.dept.length > 10 ? d.dept.substring(0, 10) + '..' : d.dept),
+        datasets: [{
+          label: '비AI 추정 예산',
+          data: top15d.map(d => d.budget),
+          backgroundColor: 'rgba(248,113,113,0.6)',
+          borderRadius: 4
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: _lbl(), callback: v => _fmt(v) }, grid: { color: _grid() } },
+          y: { ticks: { color: _lbl(), font: { size: 11 } }, grid: { display: false } }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: {
+            label: ctx => `비AI: ${_fmt(ctx.raw)} (부처 내 ${top15d[ctx.dataIndex].ratio.toFixed(1)}%)`
+          } }
+        }
+      }
+    });
+
+    // ── AI relevance distribution (histogram) ──
+    const bins = [
+      { label: '0 (비AI)', min: 0, max: 0 },
+      { label: '1~2 (저)', min: 1, max: 2 },
+      { label: '3~5 (중)', min: 3, max: 5 },
+      { label: '6~10 (고)', min: 6, max: 10 },
+      { label: '11+ (매우높음)', min: 11, max: 999 }
+    ];
+    const binCounts = bins.map(b => scored.filter(p => p.aiScore >= b.min && p.aiScore <= b.max).length);
+    const binBudgets = bins.map(b => scored.filter(p => p.aiScore >= b.min && p.aiScore <= b.max).reduce((s, p) => s + _b26(p), 0));
+    const distColors = ['#dc2626', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6'];
+
+    pcCharts['nonai-dist'] = new Chart(document.getElementById('pc-nonai-dist-chart'), {
+      type: 'bar',
+      data: {
+        labels: bins.map(b => b.label),
+        datasets: [{
+          label: '사업 수',
+          data: binCounts,
+          backgroundColor: distColors.map(c => c + 'aa'),
+          borderRadius: 4,
+          yAxisID: 'y'
+        }, {
+          label: '예산',
+          data: binBudgets,
+          type: 'line',
+          borderColor: '#a78bfa',
+          pointBackgroundColor: '#a78bfa',
+          borderWidth: 2,
+          yAxisID: 'y1'
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: _lbl(), font: { size: 11 } }, grid: { display: false } },
+          y: { position: 'left', ticks: { color: _lbl() }, grid: { color: _grid() }, title: { display: true, text: '사업 수', color: _lbl() } },
+          y1: { position: 'right', ticks: { color: '#a78bfa', callback: v => _fmt(v) }, grid: { display: false }, title: { display: true, text: '예산', color: '#a78bfa' } }
+        },
+        plugins: {
+          legend: { labels: { color: _lbl(), font: { size: 11 } } },
+          tooltip: { callbacks: { label: ctx => ctx.datasetIndex === 0 ? `${ctx.raw}건` : `예산: ${_fmt(ctx.raw)}` } }
+        }
+      }
+    });
+
+    // ── Pie chart ──
+    pcCharts['nonai-pie'] = new Chart(document.getElementById('pc-nonai-pie-chart'), {
+      type: 'doughnut',
+      data: {
+        labels: ['AI 관련 (3+ 키워드)', '저관련 경계 (1~2)', '비AI 추정 (0)'],
+        datasets: [{
+          data: [highAiBudget, lowAiBudget, nonAiBudget],
+          backgroundColor: ['rgba(16,185,129,0.7)', 'rgba(245,158,11,0.7)', 'rgba(220,38,38,0.7)'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { color: _lbl(), font: { size: 11 }, padding: 12 } },
+          tooltip: { callbacks: { label: ctx => `${ctx.label}: ${_fmt(ctx.raw)} (${(ctx.raw / totalBudget * 100).toFixed(1)}%)` } }
+        }
+      }
+    });
+
+    // ── Reason detail cards ──
+    const cardsEl = document.getElementById('pc-nonai-reason-cards');
+    if (cardsEl) {
+      cardsEl.innerHTML = reasonRank.map((r, ri) => {
+        const sorted = r.projects.sort((a, b) => _b26(b) - _b26(a));
+        const topProjects = sorted.slice(0, 3);
+        return `<div class="pc-rec-card severity-${r.budget > 1000000 ? 'high' : r.budget > 100000 ? 'medium' : 'low'}" style="cursor:pointer" data-reason-idx="${ri}">
+          <div class="rec-severity">${r.name}</div>
+          <div class="rec-title">${r.projects.length}건, ${_fmt(r.budget)}</div>
+          <div class="rec-body">${r.desc}</div>
+          <div class="rec-data">
+            ${topProjects.map(p => `<div style="width:100%;display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0">
+              <span style="font-weight:400;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${p.department} — ${(p.project_name || p.name || '').substring(0, 35)}</span>
+              <span style="margin-left:8px">${_fmt(_b26(p))}</span>
+            </div>`).join('')}
+            ${sorted.length > 3 ? `<div style="width:100%;text-align:center;padding:4px 0;color:var(--accent);font-size:11px;font-weight:600">▼ 클릭하여 전체 ${sorted.length}건 보기</div>` : ''}
+          </div>
+          <div class="nai-reason-detail" id="nai-reason-detail-${ri}" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+            <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
+              <table class="data-table" style="width:100%;font-size:11px">
+                <thead><tr>
+                  <th style="min-width:60px">부처</th>
+                  <th style="min-width:160px">사업명</th>
+                  ${AI_FIELDS.map(f => `<th style="text-align:center;min-width:50px;font-size:10px;white-space:nowrap" title="${f.label}에서 AI 키워드 검출 여부">${f.label}</th>`).join('')}
+                  <th style="text-align:right;min-width:60px">예산</th>
+                </tr></thead>
+                <tbody>
+                  ${sorted.map(p => {
+                    const pName = (p.project_name || p.name || '');
+                    const fr = p.fieldResults || {};
+                    return `<tr style="cursor:pointer" onclick="event.stopPropagation();if(typeof showProjectModal==='function')showProjectModal(${p.id})">
+                      <td style="white-space:nowrap">${p.department.substring(0, 8)}</td>
+                      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${pName}">${pName}</td>
+                      ${AI_FIELDS.map(f => {
+                        const r2 = fr[f.id];
+                        if (!r2) return '<td style="text-align:center;color:var(--text-muted)">-</td>';
+                        if (!r2.hasText) return '<td style="text-align:center;color:var(--text-muted);font-size:10px" title="데이터 없음">&#8212;</td>';
+                        if (r2.keywords.length > 0) return `<td style="text-align:center" title="${r2.keywords.join(', ')}"><span style="color:var(--green);font-weight:700">&#10003;</span></td>`;
+                        return '<td style="text-align:center"><span style="color:var(--red);font-weight:700">&#10007;</span></td>';
+                      }).join('')}
+                      <td style="text-align:right;font-weight:600;white-space:nowrap">${_fmt(_b26(p))}</td>
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-align:right">
+              합계: <strong>${_fmt(r.budget)}</strong>
+              &nbsp;|&nbsp; <span style="color:var(--green)">&#10003;</span> AI 키워드 있음 &nbsp; <span style="color:var(--red)">&#10007;</span> 없음 &nbsp; &#8212; 데이터 없음
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+
+      // Toggle detail list on card click
+      cardsEl.querySelectorAll('.pc-rec-card[data-reason-idx]').forEach(card => {
+        card.addEventListener('click', (e) => {
+          const idx = card.dataset.reasonIdx;
+          const detail = document.getElementById('nai-reason-detail-' + idx);
+          if (!detail) return;
+          const isOpen = detail.style.display !== 'none';
+          // Close all others
+          cardsEl.querySelectorAll('.nai-reason-detail').forEach(d => { d.style.display = 'none'; });
+          cardsEl.querySelectorAll('.pc-rec-card').forEach(c => { c.style.boxShadow = ''; c.style.borderColor = ''; });
+          if (!isOpen) {
+            detail.style.display = 'block';
+            card.style.borderColor = 'var(--accent)';
+            card.style.boxShadow = 'var(--shadow)';
+          }
+        });
+      });
+    }
+
+    // ── Non-AI detail table ──
+    let naiSortKey = 'budget';
+    let naiSortDir = 'desc';
+
+    function renderNonAiTable() {
+      const search = (document.getElementById('pc-nonai-search')?.value || '').toLowerCase();
+      const deptFilter = document.getElementById('pc-nonai-dept-filter')?.value || '';
+      const reasonFilter = document.getElementById('pc-nonai-reason-filter')?.value || '';
+
+      let filtered = nonAi.filter(p => {
+        if (deptFilter && p.department !== deptFilter) return false;
+        if (reasonFilter && (!p.nonAiReason || p.nonAiReason.id !== reasonFilter)) return false;
+        if (search) {
+          const t = ((p.project_name || '') + ' ' + p.department + ' ' + (p.sub_projects || []).map(s => s.name).join(' ')).toLowerCase();
+          if (!t.includes(search)) return false;
+        }
+        return true;
+      });
+
+      filtered.sort((a, b) => {
+        if (naiSortKey === 'budget') return naiSortDir === 'asc' ? _b26(a) - _b26(b) : _b26(b) - _b26(a);
+        if (naiSortKey === 'department') return naiSortDir === 'asc' ? a.department.localeCompare(b.department) : b.department.localeCompare(a.department);
+        if (naiSortKey === 'name') {
+          const na = a.project_name || a.name || '';
+          const nb = b.project_name || b.name || '';
+          return naiSortDir === 'asc' ? na.localeCompare(nb) : nb.localeCompare(na);
+        }
+        return 0;
+      });
+
+      const sumBudget = filtered.reduce((s, p) => s + _b26(p), 0);
+      function si(key) {
+        if (naiSortKey !== key) return '';
+        return naiSortDir === 'asc' ? ' &#9650;' : ' &#9660;';
+      }
+
+      const showRows = filtered.slice(0, 100);
+      const wrap = document.getElementById('pc-nonai-table-wrap');
+      // Abbreviated field labels for compact header
+      const shortFields = [
+        { id: 'name', label: '사업명' },
+        { id: 'sub', label: '내역' },
+        { id: 'program', label: '프로그램' },
+        { id: 'purpose', label: '목적' },
+        { id: 'description', label: '내용' },
+        { id: 'legal', label: '법적근거' }
+      ];
+      wrap.innerHTML = `
+        <table class="data-table" style="width:100%;font-size:12px">
+          <thead><tr>
+            <th class="nai-sort" data-key="department" style="cursor:pointer">부처${si('department')}</th>
+            <th class="nai-sort" data-key="name" style="cursor:pointer">사업명${si('name')}</th>
+            <th>사유</th>
+            ${shortFields.map(f => `<th style="text-align:center;font-size:10px;white-space:nowrap;min-width:36px" title="${f.label}에서 AI 키워드 검출 여부">${f.label}</th>`).join('')}
+            <th>유형</th>
+            <th class="nai-sort num" data-key="budget" style="cursor:pointer;text-align:right">2026 예산${si('budget')}</th>
+          </tr></thead>
+          <tbody>
+            ${showRows.map(p => {
+              const pName = p.project_name || p.name || '';
+              const reason = p.nonAiReason ? p.nonAiReason.name : '-';
+              const rColor = p.nonAiReason && p.nonAiReason.id !== 'no_keyword' ? 'var(--yellow)' : 'var(--red)';
+              const pType = p.is_rnd ? 'R&D' : p.is_informatization ? '정보화' : '일반';
+              const fr = p.fieldResults || {};
+              return `<tr style="cursor:pointer" onclick="if(typeof showProjectModal==='function')showProjectModal(${p.id})">
+                <td style="white-space:nowrap">${p.department.substring(0, 10)}</td>
+                <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${pName}">${pName}</td>
+                <td><span style="color:${rColor};font-size:10px;font-weight:600;white-space:nowrap">${reason}</span></td>
+                ${shortFields.map(f => {
+                  const r2 = fr[f.id];
+                  if (!r2 || !r2.hasText) return '<td style="text-align:center;color:var(--text-muted);font-size:10px" title="데이터 없음">&#8212;</td>';
+                  if (r2.keywords.length > 0) return `<td style="text-align:center" title="${r2.keywords.join(', ')}"><span style="color:var(--green);font-weight:700;font-size:11px">&#10003;</span></td>`;
+                  return '<td style="text-align:center"><span style="color:var(--red);font-weight:700;font-size:11px">&#10007;</span></td>';
+                }).join('')}
+                <td><span style="font-size:10px">${pType}</span></td>
+                <td style="text-align:right;font-weight:600">${_fmt(_b26(p))}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+
+      const summaryEl = document.getElementById('pc-nonai-table-summary');
+      if (summaryEl) {
+        summaryEl.innerHTML = `총 ${filtered.length}건 | 예산 합계: <strong style="color:var(--red)">${_fmt(sumBudget)}</strong> (전체의 ${(sumBudget / totalBudget * 100).toFixed(1)}%)${filtered.length > 100 ? ' (상위 100건 표시)' : ''}`;
+      }
+
+      wrap.querySelectorAll('.nai-sort').forEach(th => {
+        th.addEventListener('click', () => {
+          const key = th.dataset.key;
+          if (naiSortKey === key) naiSortDir = naiSortDir === 'asc' ? 'desc' : 'asc';
+          else { naiSortKey = key; naiSortDir = 'desc'; }
+          renderNonAiTable();
+        });
+      });
+    }
+
+    renderNonAiTable();
+
+    document.getElementById('pc-nonai-search')?.addEventListener('input', () => { clearTimeout(window._naiSearchTimer); window._naiSearchTimer = setTimeout(renderNonAiTable, 300); });
+    document.getElementById('pc-nonai-dept-filter')?.addEventListener('change', renderNonAiTable);
+    document.getElementById('pc-nonai-reason-filter')?.addEventListener('change', renderNonAiTable);
+
+    // ── Low-AI borderline table ──
+    const lowSorted = lowAi.sort((a, b) => _b26(b) - _b26(a)).slice(0, 50);
+    const lowWrap = document.getElementById('pc-lowai-table-wrap');
+    if (lowWrap) {
+      const lowFields = [
+        { id: 'name', label: '사업명' }, { id: 'sub', label: '내역' }, { id: 'program', label: '프로그램' },
+        { id: 'purpose', label: '목적' }, { id: 'description', label: '내용' }, { id: 'legal', label: '법적근거' }
+      ];
+      lowWrap.innerHTML = `
+        <table class="data-table" style="width:100%;font-size:12px">
+          <thead><tr>
+            <th>부처</th><th>사업명</th><th>매칭 키워드</th>
+            ${lowFields.map(f => `<th style="text-align:center;font-size:10px;white-space:nowrap;min-width:36px" title="${f.label}에서 AI 키워드 검출 여부">${f.label}</th>`).join('')}
+            <th style="text-align:right">2026 예산</th>
+          </tr></thead>
+          <tbody>
+            ${lowSorted.map(p => {
+              const pName = p.project_name || p.name || '';
+              const kwTags = p.aiMatched.map(kw => `<span style="background:var(--yellow-dim);color:var(--yellow);padding:1px 6px;border-radius:4px;font-size:10px;margin-right:2px">${kw}</span>`).join('');
+              const fr = p.fieldResults || {};
+              return `<tr style="cursor:pointer" onclick="if(typeof showProjectModal==='function')showProjectModal(${p.id})">
+                <td style="white-space:nowrap">${p.department.substring(0, 10)}</td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${pName}">${pName}</td>
+                <td>${kwTags}</td>
+                ${lowFields.map(f => {
+                  const r2 = fr[f.id];
+                  if (!r2 || !r2.hasText) return '<td style="text-align:center;color:var(--text-muted);font-size:10px">&#8212;</td>';
+                  if (r2.keywords.length > 0) return `<td style="text-align:center" title="${r2.keywords.join(', ')}"><span style="color:var(--green);font-weight:700;font-size:11px">&#10003;</span></td>`;
+                  return '<td style="text-align:center"><span style="color:var(--red);font-weight:700;font-size:11px">&#10007;</span></td>';
+                }).join('')}
+                <td style="text-align:right;font-weight:600">${_fmt(_b26(p))}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+          ${lowAi.length > 50 ? `상위 50건 표시 (전체 ${lowAi.length}건) | ` : ''}
+          <span style="color:var(--green)">&#10003;</span> AI 키워드 있음 &nbsp; <span style="color:var(--red)">&#10007;</span> 없음 &nbsp; &#8212; 데이터 없음
+        </div>
+      `;
+    }
   }
 
   // ── Export ──────────────────────────────────────────────────
