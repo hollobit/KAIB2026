@@ -81,12 +81,40 @@ function initBudgetInsightTab(DATA) {
   container.innerHTML = `
     <div style="padding:20px;max-width:1400px;margin:0 auto">
       <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;border-bottom:2px solid var(--border);padding-bottom:12px">
-        <button class="bi-sub-tab active" data-subtab="anomaly" onclick="switchBiSubTab('anomaly')">이상치 탐지</button>
+        <button class="bi-sub-tab active" data-subtab="flow" onclick="switchBiSubTab('flow')">예산 흐름</button>
+        <button class="bi-sub-tab" data-subtab="anomaly" onclick="switchBiSubTab('anomaly')">이상치 탐지</button>
         <button class="bi-sub-tab" data-subtab="concentration" onclick="switchBiSubTab('concentration')">예산 집중도</button>
         <button class="bi-sub-tab" data-subtab="waste" onclick="switchBiSubTab('waste')">낭비 리스크</button>
         <button class="bi-sub-tab" data-subtab="inquiry" onclick="switchBiSubTab('inquiry')">국회 질의</button>
       </div>
-      <div id="bi-panel-anomaly" class="bi-panel active"></div>
+      <div id="bi-panel-flow" class="bi-panel active">
+        <div class="bi-card">
+          <div class="bi-card-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span>연도별 예산 변화 추이 (2024-2026)</span>
+            <div id="flow-dept-selector" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px"></div>
+          </div>
+          <div class="chart-container" style="height:400px"><canvas id="chart-year-trend"></canvas></div>
+        </div>
+        <div class="grid-2" style="gap:12px">
+          <div class="bi-card">
+            <div class="bi-card-title">3개년 총예산 비교 (2024-2025-2026)</div>
+            <div class="chart-container" style="height:320px"><canvas id="chart-3year-total"></canvas></div>
+          </div>
+          <div class="bi-card">
+            <div class="bi-card-title">부처별 3개년 추이 (상위 10)</div>
+            <div class="chart-container" style="height:320px"><canvas id="chart-3year-dept-line"></canvas></div>
+          </div>
+        </div>
+        <div class="bi-card">
+          <div class="bi-card-title">3개년 변동 히트맵 (상위 20 부처)</div>
+          <div id="heatmap-3year" style="overflow-x:auto"></div>
+        </div>
+        <div class="bi-card">
+          <div class="bi-card-title">예산 흐름 산키 다이어그램 (부처 → 분야 → 사업유형) <span style="font-size:11px;color:var(--text-muted);font-weight:400">노드 클릭 시 사업 목록</span></div>
+          <div id="sankey-container" style="min-height:700px"></div>
+        </div>
+      </div>
+      <div id="bi-panel-anomaly" class="bi-panel" style="display:none"></div>
       <div id="bi-panel-concentration" class="bi-panel" style="display:none"></div>
       <div id="bi-panel-waste" class="bi-panel" style="display:none"></div>
       <div id="bi-panel-inquiry" class="bi-panel" style="display:none"></div>
@@ -153,10 +181,13 @@ function initBudgetInsightTab(DATA) {
     const panel = document.getElementById('bi-panel-' + sub);
     if (panel) panel.style.display = '';
 
+    if (sub === 'flow' && !panel.dataset.rendered) { if (typeof renderFlow === 'function') renderFlow(); panel.dataset.rendered = '1'; }
     if (sub === 'anomaly' && !panel.dataset.rendered) { renderAnomaly(); panel.dataset.rendered = '1'; }
     if (sub === 'concentration' && !panel.dataset.rendered) { renderConcentration(); panel.dataset.rendered = '1'; }
     if (sub === 'waste' && !panel.dataset.rendered) { renderWaste(); panel.dataset.rendered = '1'; }
     if (sub === 'inquiry' && !panel.dataset.rendered) { renderInquiry(); panel.dataset.rendered = '1'; }
+
+    if (typeof updateTabHash === 'function') updateTabHash('insight');
   };
 
   // ══════════════════════════════════════════════
@@ -958,6 +989,6 @@ function initBudgetInsightTab(DATA) {
   }
 
   // ── Initial render ──
-  renderAnomaly();
-  document.getElementById('bi-panel-anomaly').dataset.rendered = '1';
+  if (typeof renderFlow === 'function') renderFlow();
+  document.getElementById('bi-panel-flow').dataset.rendered = '1';
 }

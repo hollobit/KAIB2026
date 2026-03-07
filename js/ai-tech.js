@@ -172,6 +172,7 @@ window.initAiTechTab = function(DATA) {
     container.querySelectorAll('.ait-sub').forEach(b => b.classList.remove('active'));
     container.querySelector(`[onclick*="${subId}"]`).classList.add('active');
     renderSub(subId);
+    if (typeof updateTabHash === 'function') updateTabHash('ai-tech');
   };
 
   function renderSub(subId) {

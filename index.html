@@ -1173,7 +1173,6 @@ body {
     <button role="tab" aria-selected="false" aria-controls="tab-field" class="tab-btn" data-tab="field">분야별 분석</button>
     <button role="tab" aria-selected="false" aria-controls="tab-duplicate" class="tab-btn" data-tab="duplicate">유사성 분석</button>
     <button role="tab" aria-selected="false" aria-controls="tab-projects" class="tab-btn" data-tab="projects">사업 목록</button>
-    <button role="tab" aria-selected="false" aria-controls="tab-flow" class="tab-btn" data-tab="flow">예산 흐름 분석</button>
     <button role="tab" aria-selected="false" aria-controls="tab-policy" class="tab-btn" data-tab="policy">정책 클러스터</button>
     <button role="tab" aria-selected="false" aria-controls="tab-cross-compare" class="tab-btn" data-tab="cross-compare">비교 분석</button>
     <button role="tab" aria-selected="false" aria-controls="tab-future" class="tab-btn" data-tab="future">미래 예산 시뮬레이터</button>
@@ -1640,42 +1639,14 @@ body {
   </div>
 
   <!-- Flow Tab -->
-  <div class="tab-content" id="tab-flow" role="tabpanel" aria-labelledby="tab-btn-flow">
-    <div class="card">
-      <div class="card-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <span>연도별 예산 변화 추이 (2024-2026)</span>
-        <div id="flow-dept-selector" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px"></div>
+  <!-- Sankey detail modal (used by flow sub-tab in insight) -->
+  <div class="modal-overlay" id="sankey-detail-modal" style="display:none">
+    <div class="modal" style="max-width:800px;width:90vw;max-height:85vh;padding:24px;position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 id="sankey-detail-title" style="margin:0;font-size:16px"></h3>
+        <button class="modal-close" onclick="document.getElementById('sankey-detail-modal').style.display='none';document.body.style.overflow=''">&times;</button>
       </div>
-      <div class="chart-container" style="height:400px"><canvas id="chart-year-trend"></canvas></div>
-    </div>
-    <!-- 3개년 총예산 비교 -->
-    <div class="grid-2" style="gap:12px">
-      <div class="card">
-        <div class="card-title">3개년 총예산 비교 (2024-2025-2026)</div>
-        <div class="chart-container" style="height:320px"><canvas id="chart-3year-total"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="card-title">부처별 3개년 추이 (상위 10)</div>
-        <div class="chart-container" style="height:320px"><canvas id="chart-3year-dept-line"></canvas></div>
-      </div>
-    </div>
-    <!-- 3개년 변동 히트맵 -->
-    <div class="card">
-      <div class="card-title">3개년 변동 히트맵 (상위 20 부처)</div>
-      <div id="heatmap-3year" style="overflow-x:auto"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">예산 흐름 산키 다이어그램 (부처 → 분야 → 사업유형) <span style="font-size:11px;color:var(--text-muted);font-weight:400">노드 클릭 시 사업 목록</span></div>
-      <div id="sankey-container" style="min-height:700px"></div>
-    </div>
-    <div class="modal-overlay" id="sankey-detail-modal" style="display:none">
-      <div class="modal" style="max-width:800px;width:90vw;max-height:85vh;padding:24px;position:relative">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <h3 id="sankey-detail-title" style="margin:0;font-size:16px"></h3>
-          <button class="modal-close" onclick="document.getElementById('sankey-detail-modal').style.display='none';document.body.style.overflow=''">&times;</button>
-        </div>
-        <div id="sankey-detail-body" style="overflow-y:auto;max-height:calc(85vh - 100px)"></div>
-      </div>
+      <div id="sankey-detail-body" style="overflow-y:auto;max-height:calc(85vh - 100px)"></div>
     </div>
   </div>
 
@@ -1918,7 +1889,6 @@ function rerenderAllCharts() {
   if (activeTab === 'department') renderDepartment();
   if (activeTab === 'field') renderField();
   if (activeTab === 'duplicate') renderDuplicate();
-  if (activeTab === 'flow') renderFlow();
   if (activeTab === 'policy' && typeof initPolicyClusterTab === 'function') initPolicyClusterTab(DATA);
   if (activeTab === 'cross-compare' && typeof initCrossCompareTab === 'function') initCrossCompareTab(DATA);
   if (activeTab === 'future' && typeof initFutureSimTab === 'function') initFutureSimTab(DATA);
@@ -2114,7 +2084,6 @@ function switchToTab(tabName, pushState) {
   // Lazy render
   if (tabName === 'field') renderField();
   if (tabName === 'duplicate') renderDuplicate();
-  if (tabName === 'flow') renderFlow();
   if (tabName === 'department') renderDepartment();
   if (tabName === 'policy' && typeof initPolicyClusterTab === 'function') initPolicyClusterTab(DATA);
   if (tabName === 'cross-compare' && typeof initCrossCompareTab === 'function') initCrossCompareTab(DATA);
@@ -2155,6 +2124,16 @@ function getActiveSubTab(tabName) {
   if (tabName === 'duplicate') {
     return document.querySelector('#tab-duplicate .dup-sub-tab.active')?.dataset?.subtab || '';
   }
+  if (tabName === 'insight') {
+    return document.querySelector('#tab-insight .bi-sub-tab.active')?.dataset?.subtab || '';
+  }
+  if (tabName === 'ai-tech') {
+    const active = document.querySelector('#tab-ai-tech .ait-sub.active');
+    if (active) {
+      const m = active.getAttribute('onclick')?.match(/switchAiTechSub\('([^']+)'\)/);
+      return m ? m[1] : '';
+    }
+  }
   return '';
 }
 
@@ -2171,6 +2150,12 @@ function activateSubTab(tabName, subId) {
   }
   if (tabName === 'duplicate' && typeof switchDupSubTab === 'function') {
     switchDupSubTab(subId);
+  }
+  if (tabName === 'insight' && typeof switchBiSubTab === 'function') {
+    switchBiSubTab(subId);
+  }
+  if (tabName === 'ai-tech' && typeof window.switchAiTechSub === 'function') {
+    window.switchAiTechSub(subId);
   }
 }
 
