@@ -194,6 +194,19 @@
 
 ---
 
+## 2026-03-07 (v2.6) - 탭 구조 개편 및 서브탭 URL 해시 연동
+
+### 1. 예산 흐름 분석 탭 통합 (`output/index.html`, `output/js/budget-insight.js`)
+- "예산 흐름 분석" 메인 탭을 "예산 인사이트"의 첫번째 서브탭("예산 흐름")으로 통합
+- 메인 탭 수 축소로 네비게이션 간결화
+- 연도별 추이, 3개년 비교, 히트맵, 산키 차트를 서브탭 내 렌더링
+
+### 2. 서브탭 URL 해시 지원 (`output/index.html`, `output/js/budget-insight.js`, `output/js/ai-tech.js`)
+- 예산 인사이트 서브탭: `#insight?sub=flow`, `#insight?sub=anomaly` 등
+- AI 기술 분석 서브탭: `#ai-tech?sub=tech-overview`, `#ai-tech?sub=rnd-stage` 등
+- `getActiveSubTab()`, `activateSubTab()`에 insight, ai-tech 추가
+- 서브탭 전환 시 URL 해시 자동 업데이트, 북마크/공유 가능
+
 ## 2026-03-07 (v2.5) - 과제 상세 모달 유사도 점검 기능
 
 ### 1. 유사사업 점검 버튼 (`output/index.html`)
