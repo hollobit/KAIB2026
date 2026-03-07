@@ -1631,7 +1631,7 @@
   // Field-level AI relevance check
   const AI_FIELDS = [
     { id: 'name',        label: '사업명',      extract: p => (p.project_name || p.name || '') },
-    { id: 'sub',         label: '내역사업명',  extract: p => (p.sub_projects || []).map(s => s.name || '').join(' ') },
+    { id: 'sub',         label: '내역사업명',  extract: p => (p.sub_projects || []).map(s => s.name || '').join(' '), extractDetail: p => (p.sub_projects || []).map(s => ({ name: s.name || '', budget: s.budget_2026 || 0 })) },
     { id: 'program',     label: '프로그램',    extract: p => (p.program?.name || '') + ' ' + (p.unit_project?.name || '') + ' ' + (p.detail_project?.name || '') },
     { id: 'purpose',     label: '사업목적',    extract: p => (p.purpose || '') },
     { id: 'description', label: '사업내용',    extract: p => (p.description || '') },
@@ -1649,6 +1649,23 @@
     return found;
   }
 
+  // Render a field cell for AI relevance tables
+  // For 'sub' field with subDetails, shows "AI건/전체건" breakdown
+  function _renderFieldCell(r2, fieldId) {
+    if (!r2 || !r2.hasText) return '<td style="text-align:center;color:var(--text-muted);font-size:10px" title="데이터 없음">&#8212;</td>';
+    if (fieldId === 'sub' && r2.subDetails && r2.subTotal > 0) {
+      const aiCnt = r2.subAiCount || 0;
+      const total = r2.subTotal;
+      const color = aiCnt === 0 ? 'var(--red)' : aiCnt === total ? 'var(--green)' : 'var(--yellow)';
+      const aiNames = r2.subDetails.filter(s => s.isAi).map(s => s.name).join(', ');
+      const nonAiNames = r2.subDetails.filter(s => !s.isAi).map(s => s.name).join(', ');
+      const tooltip = (aiCnt > 0 ? 'AI: ' + aiNames : '') + (aiCnt > 0 && (total - aiCnt) > 0 ? '\n' : '') + ((total - aiCnt) > 0 ? '비AI: ' + nonAiNames : '');
+      return `<td style="text-align:center" title="${tooltip.replace(/"/g, '&quot;')}"><span style="color:${color};font-weight:700;font-size:10px">${aiCnt}/${total}</span></td>`;
+    }
+    if (r2.keywords.length > 0) return `<td style="text-align:center" title="${r2.keywords.join(', ')}"><span style="color:var(--green);font-weight:700;font-size:11px">&#10003;</span></td>`;
+    return '<td style="text-align:center"><span style="color:var(--red);font-weight:700;font-size:11px">&#10007;</span></td>';
+  }
+
   function scoreAiRelevance(p) {
     // Per-field analysis
     const fieldResults = {};
@@ -1656,7 +1673,20 @@
     for (const f of AI_FIELDS) {
       const text = f.extract(p);
       const kws = _findKwInText(text);
-      fieldResults[f.id] = { label: f.label, keywords: kws, hasText: text.trim().length > 0 };
+      const result = { label: f.label, keywords: kws, hasText: text.trim().length > 0 };
+
+      // Sub-project detail: evaluate each sub-project individually
+      if (f.id === 'sub' && f.extractDetail) {
+        const subs = f.extractDetail(p);
+        if (subs.length > 0) {
+          const subDetails = subs.map(s => ({ name: s.name, budget: s.budget, keywords: _findKwInText(s.name), isAi: _findKwInText(s.name).length > 0 }));
+          result.subDetails = subDetails;
+          result.subAiCount = subDetails.filter(s => s.isAi).length;
+          result.subTotal = subDetails.length;
+        }
+      }
+
+      fieldResults[f.id] = result;
       kws.forEach(kw => { if (!allMatched.includes(kw)) allMatched.push(kw); });
     }
 
@@ -1695,10 +1725,12 @@
       return { ...p, aiScore: s.matchCount, aiMatched: s.matched, nonAiReason: s.reason, fieldResults: s.fieldResults };
     });
 
+    // Exclude projects with AI/AX/인공지능 in name from non/low-AI
+    const _nameHasCoreAi = p => /AI|AX|인공지능/.test(p.project_name || p.name || '');
     // Non-AI = zero AI keyword matches
-    const nonAi = scored.filter(p => p.aiScore === 0);
-    // Low-AI = 1~2 matches (borderline)
-    const lowAi = scored.filter(p => p.aiScore >= 1 && p.aiScore <= 2);
+    const nonAi = scored.filter(p => p.aiScore === 0 && !_nameHasCoreAi(p));
+    // Low-AI = 1~2 matches (borderline), but not if name contains core AI keywords
+    const lowAi = scored.filter(p => p.aiScore >= 1 && p.aiScore <= 2 && !_nameHasCoreAi(p));
 
     const nonAiBudget = nonAi.reduce((s, p) => s + _b26(p), 0);
     const lowAiBudget = lowAi.reduce((s, p) => s + _b26(p), 0);
@@ -2033,7 +2065,7 @@
       // Abbreviated field labels for compact header
       const shortFields = [
         { id: 'name', label: '사업명' },
-        { id: 'sub', label: '내역' },
+        { id: 'sub', label: '내역사업' },
         { id: 'program', label: '프로그램' },
         { id: 'purpose', label: '목적' },
         { id: 'description', label: '내용' },
@@ -2045,7 +2077,7 @@
             <th class="nai-sort" data-key="department" style="cursor:pointer">부처${si('department')}</th>
             <th class="nai-sort" data-key="name" style="cursor:pointer">사업명${si('name')}</th>
             <th>사유</th>
-            ${shortFields.map(f => `<th style="text-align:center;font-size:10px;white-space:nowrap;min-width:36px" title="${f.label}에서 AI 키워드 검출 여부">${f.label}</th>`).join('')}
+            ${shortFields.map(f => `<th style="text-align:center;font-size:10px;white-space:nowrap;min-width:${f.id === 'sub' ? '60' : '36'}px" title="${f.label}에서 AI 키워드 검출 여부">${f.label}</th>`).join('')}
             <th>유형</th>
             <th class="nai-sort num" data-key="budget" style="cursor:pointer;text-align:right">2026 예산${si('budget')}</th>
           </tr></thead>
@@ -2060,12 +2092,7 @@
                 <td style="white-space:nowrap">${p.department.substring(0, 10)}</td>
                 <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${pName}">${pName}</td>
                 <td><span style="color:${rColor};font-size:10px;font-weight:600;white-space:nowrap">${reason}</span></td>
-                ${shortFields.map(f => {
-                  const r2 = fr[f.id];
-                  if (!r2 || !r2.hasText) return '<td style="text-align:center;color:var(--text-muted);font-size:10px" title="데이터 없음">&#8212;</td>';
-                  if (r2.keywords.length > 0) return `<td style="text-align:center" title="${r2.keywords.join(', ')}"><span style="color:var(--green);font-weight:700;font-size:11px">&#10003;</span></td>`;
-                  return '<td style="text-align:center"><span style="color:var(--red);font-weight:700;font-size:11px">&#10007;</span></td>';
-                }).join('')}
+                ${shortFields.map(f => _renderFieldCell(fr[f.id], f.id)).join('')}
                 <td><span style="font-size:10px">${pType}</span></td>
                 <td style="text-align:right;font-weight:600">${_fmt(_b26(p))}</td>
               </tr>`;
@@ -2100,14 +2127,14 @@
     const lowWrap = document.getElementById('pc-lowai-table-wrap');
     if (lowWrap) {
       const lowFields = [
-        { id: 'name', label: '사업명' }, { id: 'sub', label: '내역' }, { id: 'program', label: '프로그램' },
+        { id: 'name', label: '사업명' }, { id: 'sub', label: '내역사업' }, { id: 'program', label: '프로그램' },
         { id: 'purpose', label: '목적' }, { id: 'description', label: '내용' }, { id: 'legal', label: '법적근거' }
       ];
       lowWrap.innerHTML = `
         <table class="data-table" style="width:100%;font-size:12px">
           <thead><tr>
             <th>부처</th><th>사업명</th><th>매칭 키워드</th>
-            ${lowFields.map(f => `<th style="text-align:center;font-size:10px;white-space:nowrap;min-width:36px" title="${f.label}에서 AI 키워드 검출 여부">${f.label}</th>`).join('')}
+            ${lowFields.map(f => `<th style="text-align:center;font-size:10px;white-space:nowrap;min-width:${f.id === 'sub' ? '60' : '36'}px" title="${f.label}에서 AI 키워드 검출 여부">${f.label}</th>`).join('')}
             <th style="text-align:right">2026 예산</th>
           </tr></thead>
           <tbody>
@@ -2119,12 +2146,7 @@
                 <td style="white-space:nowrap">${p.department.substring(0, 10)}</td>
                 <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${pName}">${pName}</td>
                 <td>${kwTags}</td>
-                ${lowFields.map(f => {
-                  const r2 = fr[f.id];
-                  if (!r2 || !r2.hasText) return '<td style="text-align:center;color:var(--text-muted);font-size:10px">&#8212;</td>';
-                  if (r2.keywords.length > 0) return `<td style="text-align:center" title="${r2.keywords.join(', ')}"><span style="color:var(--green);font-weight:700;font-size:11px">&#10003;</span></td>`;
-                  return '<td style="text-align:center"><span style="color:var(--red);font-weight:700;font-size:11px">&#10007;</span></td>';
-                }).join('')}
+                ${lowFields.map(f => _renderFieldCell(fr[f.id], f.id)).join('')}
                 <td style="text-align:right;font-weight:600">${_fmt(_b26(p))}</td>
               </tr>`;
             }).join('')}

@@ -238,6 +238,45 @@ body {
   background: rgba(74,158,255,0.05);
 }
 
+/* Dup sub-tabs (pill style like policy-cluster) */
+.dup-sub-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+.dup-sub-tab {
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.dup-sub-tab:hover {
+  color: var(--text-primary);
+  background: rgba(74,158,255,0.06);
+}
+.dup-sub-tab.active {
+  color: var(--accent);
+  background: var(--accent-dim);
+  font-weight: 600;
+}
+.dup-kpi-compact { margin-bottom: 12px; }
+.dup-kpi-compact .kpi-card { padding: 10px 14px; }
+.dup-kpi-compact .kpi-card .icon { width: 24px; height: 24px; font-size: 12px; margin-bottom: 4px; border-radius: 6px; }
+.dup-kpi-compact .kpi-card .value { font-size: 18px; }
+.dup-kpi-compact .kpi-card .label { font-size: 10px; }
+
 /* Main */
 .main {
   max-width: 1600px;
@@ -1007,7 +1046,7 @@ body {
     <button class="tab-btn active" data-tab="overview">개요</button>
     <button class="tab-btn" data-tab="department">부처별 분석</button>
     <button class="tab-btn" data-tab="field">분야별 분석</button>
-    <button class="tab-btn" data-tab="duplicate">중복사업 분석</button>
+    <button class="tab-btn" data-tab="duplicate">유사성 분석</button>
     <button class="tab-btn" data-tab="projects">사업 목록</button>
     <button class="tab-btn" data-tab="flow">예산 흐름 분석</button>
     <button class="tab-btn" data-tab="policy">정책 클러스터</button>
@@ -1170,79 +1209,99 @@ body {
 
   <!-- Duplicate Tab -->
   <div class="tab-content" id="tab-duplicate">
-    <div class="kpi-grid" id="dup-kpi-grid"></div>
-    <div class="filter-bar">
-      <input type="text" class="search-input" id="dup-search" placeholder="중복 그룹 검색...">
-      <select id="dup-sort">
-        <option value="budget">예산 규모순</option>
-        <option value="count">사업 수순</option>
-        <option value="name">이름순</option>
-      </select>
-      <button class="btn-export dup" onclick="exportDupCSV()">CSV 내보내기</button>
-      <button class="btn-export excel" onclick="exportDupExcel()">Excel 내보내기</button>
-    </div>
-    <div class="card" id="dup-similarity-card">
-      <div class="card-title" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        유사 사업 탐색기
-        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:280px">
-          <span style="font-size:11px;font-weight:400;color:var(--text-muted);white-space:nowrap">유사도 기준</span>
-          <input type="range" id="sim-threshold" min="30" max="100" value="60" step="5"
-            style="flex:1;accent-color:var(--accent)" oninput="updateSimExplorer()">
-          <span id="sim-threshold-val" style="font-size:13px;font-weight:700;color:var(--accent);min-width:36px">60%</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:400">
-          <select id="sim-sort" style="padding:4px 8px;background:var(--bg-main);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px" onchange="updateSimExplorer()">
-            <option value="similarity">유사도순</option>
-            <option value="budget">예산순</option>
-            <option value="dept">부처순</option>
-          </select>
-          <span id="sim-pair-count" style="color:var(--text-muted)"></span>
-        </div>
-      </div>
-      <div id="sim-bar-container" style="height:12px;background:var(--bg-main);border-radius:6px;margin:8px 0 12px;overflow:hidden;display:flex">
-        <div id="sim-bar-high" style="background:#f87171;transition:width 0.3s" title="높음(≥60%)"></div>
-        <div id="sim-bar-mid" style="background:#fbbf24;transition:width 0.3s" title="중간(≥40%)"></div>
-        <div id="sim-bar-low" style="background:#34d399;transition:width 0.3s" title="낮음(≥30%)"></div>
-      </div>
-      <div id="sim-explorer-list" style="max-height:520px;overflow-y:auto"></div>
-    </div>
-    <!-- BI Analysis Widgets -->
-    <div class="grid-3" id="dup-bi-widgets" style="margin-bottom:20px;overflow:hidden">
-      <div class="card" id="dup-heatmap-card">
-        <div class="card-title">부처간 중복 예산 히트맵</div>
-        <div id="dup-heatmap-container" style="height:420px;overflow:auto"></div>
-      </div>
-      <div class="card" id="dup-scorecard-card">
-        <div class="card-title">통합 우선순위 스코어카드</div>
-        <div id="dup-scorecard-container" style="height:340px;overflow:auto"></div>
-      </div>
-      <div class="card" id="dup-bubble-card">
-        <div class="card-title">중복 도메인 버블차트</div>
-        <div style="position:relative;height:320px"><canvas id="chart-dup-bubble"></canvas></div>
-      </div>
-      <div class="card" id="dup-savings-card">
-        <div class="card-title">예산 절감 시뮬레이터</div>
-        <div id="dup-savings-container" style="height:360px;overflow:auto"></div>
-      </div>
-      <div class="card" id="dup-portfolio-card">
-        <div class="card-title">부처별 중복 포트폴리오</div>
-        <div id="dup-portfolio-container" style="height:340px;overflow:hidden">
-          <select id="dup-portfolio-dept" style="width:100%;padding:6px;margin-bottom:8px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:4px">
-            <option value="">부처 선택</option>
-          </select>
-          <div style="position:relative;height:280px"><canvas id="chart-dup-radar"></canvas></div>
-        </div>
-      </div>
-      <div class="card" id="dup-taxonomy-card">
-        <div class="card-title">중복 유형 분류 대시보드</div>
-        <div id="dup-taxonomy-container" style="height:360px;overflow:auto">
-          <div style="position:relative;height:190px"><canvas id="chart-dup-taxonomy"></canvas></div>
-          <div id="dup-taxonomy-detail" style="margin-top:8px"></div>
-        </div>
-      </div>
+    <div class="dup-sub-tabs">
+      <button class="dup-sub-tab active" data-subtab="overview" onclick="switchDupSubTab('overview')">유사성/중복성</button>
+      <button class="dup-sub-tab" data-subtab="keyword-search" onclick="switchDupSubTab('keyword-search')">키워드 유사성 검색</button>
+      <button class="dup-sub-tab" data-subtab="sim-explorer" onclick="switchDupSubTab('sim-explorer')">유사 사업 탐색기</button>
     </div>
 
-    <div id="dup-groups-container"></div>
+    <!-- Sub-tab 1: 유사성/중복성 (기본) -->
+    <div class="dup-sub-content active" id="dup-sub-overview">
+      <div class="kpi-grid dup-kpi-compact" id="dup-kpi-grid"></div>
+      <!-- BI Analysis Widgets -->
+      <div class="grid-3" id="dup-bi-widgets" style="margin-bottom:20px;overflow:hidden">
+        <div class="card" id="dup-heatmap-card">
+          <div class="card-title">부처간 중복 예산 히트맵</div>
+          <div id="dup-heatmap-container" style="height:420px;overflow:auto"></div>
+        </div>
+        <div class="card" id="dup-scorecard-card">
+          <div class="card-title">통합 우선순위 스코어카드</div>
+          <div id="dup-scorecard-container" style="height:340px;overflow:auto"></div>
+        </div>
+        <div class="card" id="dup-bubble-card">
+          <div class="card-title">중복 도메인 버블차트</div>
+          <div style="position:relative;height:320px"><canvas id="chart-dup-bubble"></canvas></div>
+        </div>
+        <div class="card" id="dup-savings-card">
+          <div class="card-title">예산 절감 시뮬레이터</div>
+          <div id="dup-savings-container" style="height:360px;overflow:auto"></div>
+        </div>
+        <div class="card" id="dup-portfolio-card">
+          <div class="card-title">부처별 중복 포트폴리오</div>
+          <div id="dup-portfolio-container" style="height:340px;overflow:hidden">
+            <select id="dup-portfolio-dept" style="width:100%;padding:6px;margin-bottom:8px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:4px">
+              <option value="">부처 선택</option>
+            </select>
+            <div style="position:relative;height:280px"><canvas id="chart-dup-radar"></canvas></div>
+          </div>
+        </div>
+        <div class="card" id="dup-taxonomy-card">
+          <div class="card-title">중복 유형 분류 대시보드</div>
+          <div id="dup-taxonomy-container" style="height:360px;overflow:auto">
+            <div style="position:relative;height:190px"><canvas id="chart-dup-taxonomy"></canvas></div>
+            <div id="dup-taxonomy-detail" style="margin-top:8px"></div>
+          </div>
+        </div>
+      </div>
+      <div id="dup-groups-container"></div>
+    </div>
+
+    <!-- Sub-tab 2: 키워드 유사성 검색 -->
+    <div class="dup-sub-content" id="dup-sub-keyword-search" style="display:none">
+      <div class="filter-bar">
+        <input type="text" class="search-input" id="dup-search" placeholder="키워드 유사성 검색 (공백:AND  |:OR  -:제외  &quot;구문&quot;)" onkeydown="if(event.key==='Enter')filterDupGroups()">
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary);white-space:nowrap;cursor:pointer;user-select:none"><input type="checkbox" id="dup-sub-project-level" style="accent-color:var(--accent);cursor:pointer" onchange="if(document.getElementById('dup-search').value.trim())filterDupGroups()"> 내역사업</label>
+        <select id="dup-sim-algorithm" style="padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-family:inherit;cursor:pointer" onchange="if(document.getElementById('dup-search').value.trim())filterDupGroups()">
+          <option value="hybrid" selected>Jaccard+Cosine (기본)</option>
+          <option value="jaccard">Jaccard</option>
+          <option value="cosine">Cosine</option>
+          <option value="dice">Dice (Sørensen)</option>
+          <option value="overlap">Overlap Coefficient</option>
+        </select>
+        <button class="btn-export" style="background:var(--accent);color:#fff;font-weight:600;padding:8px 20px;border-radius:6px" onclick="filterDupGroups()">검색</button>
+      </div>
+      <div id="dup-search-history" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px"></div>
+      <div id="dup-search-similarity" style="display:none"></div>
+    </div>
+
+    <!-- Sub-tab 3: 유사 사업 탐색기 -->
+    <div class="dup-sub-content" id="dup-sub-sim-explorer" style="display:none">
+      <div class="card" id="dup-similarity-card">
+        <div class="card-title" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          유사 사업 탐색기
+          <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:280px">
+            <span style="font-size:11px;font-weight:400;color:var(--text-muted);white-space:nowrap">유사도 기준</span>
+            <input type="range" id="sim-threshold" min="30" max="100" value="60" step="5"
+              style="flex:1;accent-color:var(--accent)" oninput="updateSimExplorer()">
+            <span id="sim-threshold-val" style="font-size:13px;font-weight:700;color:var(--accent);min-width:36px">60%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:400">
+            <select id="sim-sort" style="padding:4px 8px;background:var(--bg-main);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px" onchange="updateSimExplorer()">
+              <option value="similarity">유사도순</option>
+              <option value="budget">예산순</option>
+              <option value="dept">부처순</option>
+            </select>
+            <span id="sim-pair-count" style="color:var(--text-muted)"></span>
+          </div>
+        </div>
+        <div id="sim-bar-container" style="height:12px;background:var(--bg-main);border-radius:6px;margin:8px 0 12px;overflow:hidden;display:flex">
+          <div id="sim-bar-high" style="background:#f87171;transition:width 0.3s" title="높음(≥60%)"></div>
+          <div id="sim-bar-mid" style="background:#fbbf24;transition:width 0.3s" title="중간(≥40%)"></div>
+          <div id="sim-bar-low" style="background:#34d399;transition:width 0.3s" title="낮음(≥30%)"></div>
+        </div>
+        <div id="sim-explorer-list"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Projects Tab -->
@@ -1733,6 +1792,9 @@ function getActiveSubTab(tabName) {
   if (tabName === 'future') {
     return document.querySelector('#tab-future .fs-inner-tab.active')?.dataset?.panel || '';
   }
+  if (tabName === 'duplicate') {
+    return document.querySelector('#tab-duplicate .dup-sub-tab.active')?.dataset?.subtab || '';
+  }
   return '';
 }
 
@@ -1746,6 +1808,9 @@ function activateSubTab(tabName, subId) {
   }
   if (tabName === 'future' && typeof switchFsSubTab === 'function') {
     switchFsSubTab(subId);
+  }
+  if (tabName === 'duplicate' && typeof switchDupSubTab === 'function') {
+    switchDupSubTab(subId);
   }
 }
 
@@ -2993,6 +3058,30 @@ function hideTooltip() {
 }
 
 // ==================== Duplicate Analysis Tab ====================
+let _simExplorerRendered = false;
+let _keywordSearchRendered = false;
+let _dupUniqueGroups = [];
+
+function switchDupSubTab(tabName) {
+  document.querySelectorAll('.dup-sub-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.subtab === tabName);
+  });
+  document.querySelectorAll('.dup-sub-content').forEach(div => {
+    const id = div.id.replace('dup-sub-', '');
+    const isActive = id === tabName;
+    div.classList.toggle('active', isActive);
+    div.style.display = isActive ? '' : 'none';
+  });
+  if (tabName === 'sim-explorer' && !_simExplorerRendered) {
+    _simExplorerRendered = true;
+    setTimeout(() => renderSimExplorer(), 100);
+  }
+  if (tabName === 'keyword-search' && !_keywordSearchRendered) {
+    _keywordSearchRendered = true;
+  }
+  updateTabHash('duplicate');
+}
+
 function renderDuplicate() {
   if (!DATA) return;
 
@@ -3025,23 +3114,13 @@ function renderDuplicate() {
     </div>
   `;
 
-  renderDupGroups(uniqueGroups);
-  // Render similarity explorer
-  setTimeout(() => renderSimExplorer(), 100);
+  renderDupGroups(uniqueGroups, 'dup-groups-container');
+  // Store globally for sub-tabs
+  _dupUniqueGroups = uniqueGroups;
+  _simExplorerRendered = false;
+  _keywordSearchRendered = false;
   // Render BI widgets
   setTimeout(() => renderDupBIWidgets(uniqueGroups), 150);
-
-  // Event listeners (only attach once)
-  const searchEl = document.getElementById('dup-search');
-  const sortEl = document.getElementById('dup-sort');
-  if (!searchEl._dupBound) {
-    searchEl.addEventListener('input', () => filterDupGroups(uniqueGroups));
-    searchEl._dupBound = true;
-  }
-  if (!sortEl._dupBound) {
-    sortEl.addEventListener('change', () => filterDupGroups(uniqueGroups));
-    sortEl._dupBound = true;
-  }
 }
 
 function analyzeDuplicates(projects) {
@@ -3198,24 +3277,808 @@ function deduplicateGroups(groups) {
   return result;
 }
 
-function filterDupGroups(allGroups) {
-  const search = document.getElementById('dup-search').value.toLowerCase();
-  const sort = document.getElementById('dup-sort').value;
-
-  let filtered = allGroups.filter(g =>
-    !search || g.group_name.toLowerCase().includes(search) ||
-    g.projects.some(p => p.name.toLowerCase().includes(search) || p.department.toLowerCase().includes(search))
-  );
-
-  if (sort === 'budget') filtered.sort((a, b) => (b.total_budget || 0) - (a.total_budget || 0));
-  else if (sort === 'count') filtered.sort((a, b) => b.projects.length - a.projects.length);
-  else filtered.sort((a, b) => a.group_name.localeCompare(b.group_name));
-
-  renderDupGroups(filtered);
+function _projectFullText(p) {
+  const parts = [p.name, p.project_name, p.department, p.purpose, p.description,
+    p.legal_basis, p.implementing_agency, p.program?.name, p.program?.code,
+    p.unit_project?.name, p.unit_project?.code,
+    p.detail_project?.name, p.detail_project?.code,
+    p.code, p.division, p.account_type, p.status, p.support_type, p.subsidy_rate,
+    ...(p.keywords || []),
+    ...(p.sub_projects || []).map(s => s.name),
+    ...(p.project_managers || []).map(m => [m.sub_project, m.managing_dept, m.implementing_agency].join(' ')),
+    ...(p.ai_domains || []), p.field, p.sector
+  ];
+  return parts.filter(Boolean).join(' ').toLowerCase();
 }
 
-function renderDupGroups(groups) {
-  const container = document.getElementById('dup-groups-container');
+let _dupSearchAbort = null;
+let _lastSearchResult = null;
+const _DUP_HISTORY_KEY = 'dup_search_history';
+const _DUP_HISTORY_MAX = 20;
+
+function _getDupSearchHistory() {
+  try { return JSON.parse(localStorage.getItem(_DUP_HISTORY_KEY)) || []; }
+  catch { return []; }
+}
+
+function _saveDupSearchHistory(query) {
+  if (!query) return;
+  let hist = _getDupSearchHistory();
+  hist = hist.filter(h => h !== query);
+  hist.unshift(query);
+  if (hist.length > _DUP_HISTORY_MAX) hist = hist.slice(0, _DUP_HISTORY_MAX);
+  localStorage.setItem(_DUP_HISTORY_KEY, JSON.stringify(hist));
+  _renderDupSearchHistory();
+}
+
+function _removeDupHistoryItem(query) {
+  let hist = _getDupSearchHistory().filter(h => h !== query);
+  localStorage.setItem(_DUP_HISTORY_KEY, JSON.stringify(hist));
+  _renderDupSearchHistory();
+}
+
+function _clearDupSearchHistory() {
+  localStorage.removeItem(_DUP_HISTORY_KEY);
+  _renderDupSearchHistory();
+}
+
+function _useDupHistoryItem(query) {
+  document.getElementById('dup-search').value = query;
+  filterDupGroups();
+}
+
+function _renderDupSearchHistory() {
+  const container = document.getElementById('dup-search-history');
+  if (!container) return;
+  const hist = _getDupSearchHistory();
+  if (hist.length === 0) { container.innerHTML = ''; return; }
+  let html = '<span style="font-size:11px;color:var(--text-muted);white-space:nowrap">검색 기록:</span>';
+  hist.forEach(q => {
+    const escaped = q.replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    html += `<span style="display:inline-flex;align-items:center;gap:2px;font-size:11px;padding:2px 8px;border-radius:4px;background:var(--bg-card);border:1px solid var(--border);cursor:pointer;transition:all 0.15s;white-space:nowrap" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'" onclick="_useDupHistoryItem('${escaped}')">${escaped}<span onclick="event.stopPropagation();_removeDupHistoryItem('${escaped}')" style="margin-left:2px;color:var(--text-muted);cursor:pointer;font-size:13px;line-height:1" title="삭제">&times;</span></span>`;
+  });
+  html += `<span style="font-size:10px;color:var(--text-muted);cursor:pointer;text-decoration:underline" onclick="_clearDupSearchHistory()">전체 삭제</span>`;
+  container.innerHTML = html;
+}
+
+function _expandToSubProjects(projects) {
+  const items = [];
+  let subId = 0;
+  projects.forEach(p => {
+    const subs = p.sub_projects || [];
+    if (subs.length === 0) {
+      items.push(p);
+    } else {
+      subs.forEach(sp => {
+        subId++;
+        items.push({
+          _isSub: true,
+          _parentProject: p,
+          id: 'sub_' + p.id + '_' + subId,
+          _parentId: p.id,
+          name: sp.name,
+          project_name: sp.name,
+          department: p.department,
+          implementing_agency: p.implementing_agency,
+          purpose: p.purpose,
+          description: p.description,
+          legal_basis: p.legal_basis,
+          program: p.program,
+          unit_project: p.unit_project,
+          detail_project: p.detail_project,
+          code: p.code,
+          division: p.division,
+          account_type: p.account_type,
+          status: p.status,
+          support_type: p.support_type,
+          subsidy_rate: p.subsidy_rate,
+          keywords: p.keywords,
+          sub_projects: [],
+          project_managers: (p.project_managers || []).filter(m => m.sub_project === sp.name),
+          ai_domains: p.ai_domains,
+          field: p.field,
+          sector: p.sector,
+          budget: { '2024_final': sp.budget_2024 || 0, '2025_original': sp.budget_2025 || 0, '2025_supplementary': sp.budget_2025 || 0, '2026_request': sp.budget_2026 || 0, '2026_budget': sp.budget_2026 || 0 },
+          _parentName: p.project_name || p.name
+        });
+      });
+    }
+  });
+  return items;
+}
+
+function filterDupGroups() {
+  // Abort any in-progress search
+  if (_dupSearchAbort) { _dupSearchAbort.cancelled = true; _dupSearchAbort = null; }
+
+  const searchRaw = document.getElementById('dup-search').value.trim();
+  const expr = parseSearchExpr(searchRaw);
+  const subLevel = document.getElementById('dup-sub-project-level')?.checked || false;
+  const algorithm = document.getElementById('dup-sim-algorithm')?.value || 'hybrid';
+
+  if (expr && DATA) {
+    _saveDupSearchHistory(searchRaw);
+    const origMatched = DATA.projects.filter(p => matchSearchExpr(expr, _projectFullText(p)));
+    let matchedProjects = origMatched;
+    if (subLevel) {
+      matchedProjects = _expandToSubProjects(origMatched);
+    }
+    const terms = getSearchTerms(expr);
+    renderSearchSimilarityAsync(matchedProjects, terms, subLevel, origMatched, algorithm);
+  } else {
+    const simDiv = document.getElementById('dup-search-similarity');
+    if (simDiv) simDiv.style.display = 'none';
+  }
+}
+
+function _tokenize(text) {
+  return (text || '').replace(/\([^)]*\)/g, '').replace(/[^가-힣a-zA-Z0-9\s]/g, '')
+    .split(/\s+/).filter(w => w.length > 1);
+}
+
+function _jaccardSim(a, b) {
+  const setA = new Set(a), setB = new Set(b);
+  const inter = [...setA].filter(x => setB.has(x)).length;
+  const union = new Set([...setA, ...setB]).size;
+  return union === 0 ? 0 : inter / union;
+}
+
+function _diceSim(a, b) {
+  const setA = new Set(a), setB = new Set(b);
+  const inter = [...setA].filter(x => setB.has(x)).length;
+  return (setA.size + setB.size) === 0 ? 0 : (2 * inter) / (setA.size + setB.size);
+}
+
+function _overlapSim(a, b) {
+  const setA = new Set(a), setB = new Set(b);
+  const inter = [...setA].filter(x => setB.has(x)).length;
+  const minSize = Math.min(setA.size, setB.size);
+  return minSize === 0 ? 0 : inter / minSize;
+}
+
+function _computeSim(tokensA, tokensB, algorithm) {
+  switch (algorithm) {
+    case 'jaccard': return { combined: _jaccardSim(tokensA, tokensB), jaccard: _jaccardSim(tokensA, tokensB), cosine: 0 };
+    case 'cosine': return { combined: _cosineSim(tokensA, tokensB), jaccard: 0, cosine: _cosineSim(tokensA, tokensB) };
+    case 'dice': return { combined: _diceSim(tokensA, tokensB), jaccard: _jaccardSim(tokensA, tokensB), cosine: 0 };
+    case 'overlap': return { combined: _overlapSim(tokensA, tokensB), jaccard: _jaccardSim(tokensA, tokensB), cosine: 0 };
+    default: { // hybrid
+      const j = _jaccardSim(tokensA, tokensB);
+      const c = _cosineSim(tokensA, tokensB);
+      return { combined: j * 0.4 + c * 0.6, jaccard: j, cosine: c };
+    }
+  }
+}
+
+const _SIM_ALGO_LABELS = { hybrid: 'Jaccard+Cosine', jaccard: 'Jaccard', cosine: 'Cosine', dice: 'Dice', overlap: 'Overlap' };
+
+function _getSharedTokens(tokensA, tokensB) {
+  const setA = new Set(tokensA), setB = new Set(tokensB);
+  return [...setA].filter(x => setB.has(x));
+}
+
+// Categorize shared tokens into meaningful reason labels
+function _buildSimReason(sharedTokens, projA, projB) {
+  if (sharedTokens.length === 0) return '';
+  // Check field-level overlap for reason categories
+  const reasons = [];
+  const nameA = (projA.project_name || projA.name || '').toLowerCase();
+  const nameB = (projB.project_name || projB.name || '').toLowerCase();
+  const nameTokensA = new Set(_tokenize(nameA));
+  const nameTokensB = new Set(_tokenize(nameB));
+  const nameShared = sharedTokens.filter(t => nameTokensA.has(t) && nameTokensB.has(t));
+  if (nameShared.length > 0) reasons.push({ label: '사업명', tokens: nameShared });
+
+  const subA = (projA.sub_projects || []).map(s => s.name).join(' ').toLowerCase();
+  const subB = (projB.sub_projects || []).map(s => s.name).join(' ').toLowerCase();
+  const subTokensA = new Set(_tokenize(subA));
+  const subTokensB = new Set(_tokenize(subB));
+  const subShared = sharedTokens.filter(t => subTokensA.has(t) && subTokensB.has(t));
+  if (subShared.length > 0) reasons.push({ label: '내역사업', tokens: subShared });
+
+  const purposeA = (projA.purpose || '').toLowerCase();
+  const purposeB = (projB.purpose || '').toLowerCase();
+  const purTokensA = new Set(_tokenize(purposeA));
+  const purTokensB = new Set(_tokenize(purposeB));
+  const purShared = sharedTokens.filter(t => purTokensA.has(t) && purTokensB.has(t));
+  if (purShared.length > 0) reasons.push({ label: '사업목적', tokens: purShared });
+
+  const descA = (projA.description || '').toLowerCase();
+  const descB = (projB.description || '').toLowerCase();
+  const descTokensA = new Set(_tokenize(descA));
+  const descTokensB = new Set(_tokenize(descB));
+  const descShared = sharedTokens.filter(t => descTokensA.has(t) && descTokensB.has(t));
+  if (descShared.length > 0) reasons.push({ label: '사업내용', tokens: descShared });
+
+  const deptMatch = projA.department === projB.department;
+  if (deptMatch) reasons.push({ label: '동일부처', tokens: [projA.department] });
+
+  const agencyA = (projA.implementing_agency || '').toLowerCase();
+  const agencyB = (projB.implementing_agency || '').toLowerCase();
+  if (agencyA && agencyA === agencyB) reasons.push({ label: '동일시행기관', tokens: [projA.implementing_agency] });
+
+  return reasons;
+}
+
+function _cosineSim(tokensA, tokensB) {
+  const tf = {};
+  tokensA.forEach(t => { tf[t] = (tf[t] || 0) + 1; });
+  tokensB.forEach(t => { tf[t] = (tf[t] || 0) + 1; });
+  const allTokens = Object.keys(tf);
+  const vecA = allTokens.map(t => tokensA.filter(x => x === t).length);
+  const vecB = allTokens.map(t => tokensB.filter(x => x === t).length);
+  let dot = 0, magA = 0, magB = 0;
+  for (let i = 0; i < allTokens.length; i++) {
+    dot += vecA[i] * vecB[i];
+    magA += vecA[i] ** 2;
+    magB += vecB[i] ** 2;
+  }
+  return (magA === 0 || magB === 0) ? 0 : dot / (Math.sqrt(magA) * Math.sqrt(magB));
+}
+
+function _renderReasonTags(reasons, maxTokens) {
+  if (!reasons || reasons.length === 0) return '';
+  const max = maxTokens || 6;
+  let html = '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">';
+  let count = 0;
+  for (const r of reasons) {
+    const tokens = r.tokens.slice(0, Math.max(1, max - count));
+    html += `<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--accent-dim);color:var(--accent);white-space:nowrap">${r.label}</span>`;
+    tokens.forEach(t => {
+      html += `<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:var(--bg-main);color:var(--text-secondary);white-space:nowrap">${t}</span>`;
+      count++;
+    });
+    if (count >= max) break;
+  }
+  html += '</div>';
+  return html;
+}
+
+async function renderSearchSimilarityAsync(projects, searchTerms, subLevel, origMatched, algorithm) {
+  algorithm = algorithm || 'hybrid';
+  const container = document.getElementById('dup-search-similarity');
+  if (!container) return;
+  const keywordLabel = searchTerms.join(' ');
+
+  if (projects.length < 2) {
+    container.style.display = 'block';
+    // Calculate sub-project level count for hint when not in subLevel mode
+    let subHint = '';
+    if (!subLevel && origMatched) {
+      const subCount = _expandToSubProjects(origMatched).length;
+      if (subCount >= 2) {
+        subHint = `<div style="margin-top:8px;padding:10px 16px;background:var(--accent-dim);border-radius:6px;font-size:12px;color:var(--accent)">내역사업 레벨 검색 결과: <strong>${subCount}건</strong> — 내역사업 레벨 검색 결과는 체크박스를 체크하면 볼 수 있습니다.</div>`;
+      }
+    }
+    if (projects.length === 0) {
+      container.innerHTML = `<div class="card" style="margin-bottom:20px"><div class="card-title">검색 결과 <span style="font-size:12px;font-weight:400;color:var(--text-muted)">"${keywordLabel}"에 대한 검색 결과가 없습니다</span></div><div style="padding:24px;text-align:center;color:var(--text-muted)">검색어를 변경하거나 다른 키워드로 시도해보세요.</div>${subHint}</div>`;
+    } else {
+      container.innerHTML = `<div class="card" style="margin-bottom:20px"><div class="card-title">검색 결과 <span style="font-size:12px;font-weight:400;color:var(--text-muted)">"${keywordLabel}" 매칭 1개 ${subLevel ? '내역사업' : '사업'} (유사도 비교를 위해 2개 이상 필요)</span></div>${subHint}</div>`;
+    }
+    return;
+  }
+
+  container.style.display = 'block';
+
+  // Abort token for this run
+  const abort = { cancelled: false };
+  _dupSearchAbort = abort;
+
+  const totalPairs = projects.length * (projects.length - 1) / 2;
+
+  // Show progress UI
+  container.innerHTML = `<div class="card" style="margin-bottom:20px">
+    <div class="card-title">검색 결과 간 유사도 분석 <span style="font-size:12px;font-weight:400;color:var(--text-muted)">"${keywordLabel}" 매칭 ${projects.length}개 ${subLevel ? '내역사업' : '사업'}, ${totalPairs.toLocaleString()}개 쌍 · ${_SIM_ALGO_LABELS[algorithm]} 계산 중...</span></div>
+    <div style="margin:12px 0">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+        <div style="flex:1;height:8px;background:var(--bg-main);border-radius:4px;overflow:hidden">
+          <div id="dup-search-progress-bar" style="width:0%;height:100%;background:var(--accent);border-radius:4px;transition:width 0.2s"></div>
+        </div>
+        <span id="dup-search-progress-text" style="font-size:12px;font-weight:600;color:var(--accent);min-width:44px;text-align:right">0%</span>
+      </div>
+      <div id="dup-search-progress-detail" style="font-size:11px;color:var(--text-muted)">토큰화 중...</div>
+    </div>
+  </div>`;
+
+  const progressBar = document.getElementById('dup-search-progress-bar');
+  const progressText = document.getElementById('dup-search-progress-text');
+  const progressDetail = document.getElementById('dup-search-progress-detail');
+
+  // Phase 1: Tokenize (fast, but show step)
+  const tokenCache = projects.map(p => _tokenize(_projectFullText(p)));
+  if (abort.cancelled) return;
+
+  progressDetail.textContent = `유사도 계산 중... (0 / ${totalPairs.toLocaleString()})`;
+
+  // Phase 2: Pairwise similarity in chunks
+  const pairs = [];
+  const CHUNK = 500;
+  let computed = 0;
+
+  for (let i = 0; i < projects.length; i++) {
+    for (let j = i + 1; j < projects.length; j++) {
+      const sim = _computeSim(tokenCache[i], tokenCache[j], algorithm);
+      const shared = sim.combined >= 0.1 ? _getSharedTokens(tokenCache[i], tokenCache[j]) : [];
+      pairs.push({ a: projects[i], b: projects[j], jaccard: sim.jaccard, cosine: sim.cosine, combined: sim.combined, shared });
+      computed++;
+
+      if (computed % CHUNK === 0) {
+        const pct = Math.round(computed / totalPairs * 100);
+        progressBar.style.width = pct + '%';
+        progressText.textContent = pct + '%';
+        progressDetail.textContent = `유사도 계산 중... (${computed.toLocaleString()} / ${totalPairs.toLocaleString()})`;
+        await new Promise(r => setTimeout(r, 0)); // yield to UI
+        if (abort.cancelled) return;
+      }
+    }
+  }
+
+  if (abort.cancelled) return;
+
+  progressBar.style.width = '100%';
+  progressText.textContent = '100%';
+  progressDetail.textContent = '결과 정렬 및 렌더링 중...';
+  await new Promise(r => setTimeout(r, 0));
+  if (abort.cancelled) return;
+
+  pairs.sort((a, b) => b.combined - a.combined);
+
+  const highPairs = pairs.filter(p => p.combined >= 0.3);
+
+  // Store result for view toggling
+  _lastSearchResult = { projects, pairs, highPairs, searchTerms, totalPairs, subLevel, origMatched, algorithm };
+
+  // Build result HTML (default: pair view)
+  _renderSearchSimilarityResult(container, projects, pairs, highPairs, searchTerms, totalPairs, 'pair', subLevel);
+  _dupSearchAbort = null;
+}
+
+function toggleSearchView(viewMode) {
+  const container = document.getElementById('dup-search-similarity');
+  if (!container || !_lastSearchResult) return;
+  const { projects, pairs, highPairs, searchTerms, totalPairs, subLevel } = _lastSearchResult;
+  _renderSearchSimilarityResult(container, projects, pairs, highPairs, searchTerms, totalPairs, viewMode, subLevel);
+}
+
+function _printSearchResult() {
+  if (!_lastSearchResult) return;
+  const container = document.getElementById('dup-search-similarity');
+  if (!container) return;
+  const printWin = window.open('', '_blank');
+  if (!printWin) { alert('팝업이 차단되었습니다. 팝업을 허용해주세요.'); return; }
+  const styles = `<style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a2e; padding: 20px; font-size: 12px; }
+    .card-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; border-bottom: 2px solid #333; padding-bottom: 8px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+    th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: center; font-size: 11px; }
+    th { background: #f0f0f0; font-weight: 600; }
+    mark { background: #fde68a; padding: 0 1px; }
+    .dup-group { border: 1px solid #ccc; border-radius: 6px; margin-bottom: 10px; padding: 8px 12px; }
+    .dup-group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .dup-project-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 11px; border-bottom: 1px solid #eee; }
+    .dept { color: #666; min-width: 80px; }
+    .num { text-align: right; }
+    button { display: none !important; }
+    @media print { body { padding: 0; } }
+  </style>`;
+  printWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>유사도 분석 결과</title>${styles}</head><body>`);
+  printWin.document.write(`<h2 style="margin:0 0 16px">키워드 유사성 검색 결과</h2>`);
+  printWin.document.write(container.innerHTML);
+  printWin.document.write('</body></html>');
+  printWin.document.close();
+  printWin.onload = () => { printWin.print(); };
+}
+
+function _buildSearchResultMd() {
+  if (!_lastSearchResult) return '';
+  const { projects, pairs, highPairs, searchTerms, totalPairs, subLevel, algorithm } = _lastSearchResult;
+  const kw = searchTerms.join(' ');
+  const levelLabel = subLevel ? '내역사업' : '사업';
+  const lines = [];
+  lines.push(`# 키워드 유사성 검색 결과`);
+  lines.push('');
+  lines.push(`- **검색어**: ${kw}`);
+  lines.push(`- **유사도 알고리즘**: ${_SIM_ALGO_LABELS[algorithm] || algorithm}`);
+  lines.push(`- **분석 단위**: ${levelLabel}`);
+  lines.push(`- **매칭**: ${projects.length}개 ${levelLabel}, ${totalPairs.toLocaleString()}개 쌍`);
+  lines.push(`- **유사도 30% 이상**: ${highPairs.length}개 쌍`);
+  lines.push(`- **생성일**: ${new Date().toLocaleDateString('ko-KR')}`);
+  lines.push('');
+
+  // Pair list (top 50)
+  const showPairs = pairs.slice(0, 50);
+  if (showPairs.length > 0) {
+    lines.push(`## 유사도 상위 쌍 (최대 50개)`);
+    lines.push('');
+    lines.push('| 순위 | 유사도 | Jaccard | Cosine | 사업 A | 사업 B | 공통 키워드 |');
+    lines.push('|---:|---:|---:|---:|:---|:---|:---|');
+    showPairs.forEach((p, idx) => {
+      const pct = Math.round(p.combined * 100);
+      const nameA = (p.a.project_name || p.a.name || '').replace(/\|/g, '/');
+      const nameB = (p.b.project_name || p.b.name || '').replace(/\|/g, '/');
+      const deptA = (p.a.department || '').replace(/\|/g, '/');
+      const deptB = (p.b.department || '').replace(/\|/g, '/');
+      const parentA = p.a._isSub ? ` (← ${(p.a._parentName || '').replace(/\|/g, '/')})` : '';
+      const parentB = p.b._isSub ? ` (← ${(p.b._parentName || '').replace(/\|/g, '/')})` : '';
+      const shared = (p.shared || []).slice(0, 8).join(', ');
+      lines.push(`| ${idx+1} | ${pct}% | ${(p.jaccard*100).toFixed(1)}% | ${(p.cosine*100).toFixed(1)}% | ${deptA} ${nameA}${parentA} | ${deptB} ${nameB}${parentB} | ${shared} |`);
+    });
+    lines.push('');
+  }
+
+  // Group view
+  const parent = {};
+  projects.forEach(p => { parent[p.id] = p.id; });
+  function find(x) { return parent[x] === x ? x : (parent[x] = find(parent[x])); }
+  function union(a, b) { parent[find(a)] = find(b); }
+  pairs.filter(p => p.combined >= 0.3).forEach(p => union(p.a.id, p.b.id));
+
+  const groupMap = {};
+  projects.forEach(p => {
+    const root = find(p.id);
+    if (!groupMap[root]) groupMap[root] = [];
+    groupMap[root].push(p);
+  });
+  const groups = Object.values(groupMap).filter(g => g.length > 1).sort((a, b) => b.length - a.length);
+
+  if (groups.length > 0) {
+    const pairMap = {};
+    pairs.forEach(p => {
+      pairMap[p.a.id + '_' + p.b.id] = p;
+      pairMap[p.b.id + '_' + p.a.id] = p;
+    });
+
+    lines.push(`## 유사 사업 그룹 (유사도 30% 이상 기준, ${groups.length}개 그룹)`);
+    lines.push('');
+    groups.forEach((group, gi) => {
+      let simSum = 0, simCount = 0;
+      for (let i = 0; i < group.length; i++) {
+        for (let j = i + 1; j < group.length; j++) {
+          const p = pairMap[group[i].id + '_' + group[j].id];
+          if (p) { simSum += p.combined; simCount++; }
+        }
+      }
+      const avgPct = simCount > 0 ? Math.round(simSum / simCount * 100) : 0;
+      const totalBudget = group.reduce((s, p) => s + (p.budget?.['2026_budget'] || 0), 0);
+      const depts = [...new Set(group.map(p => p.department))];
+
+      lines.push(`### 그룹 ${gi+1} (평균 유사도 ${avgPct}%, ${group.length}개 ${levelLabel}, ${depts.length}개 부처)`);
+      lines.push('');
+      lines.push(`| ${levelLabel}명 | 부처 | 2026 예산 |`);
+      lines.push('|:---|:---|---:|');
+      group.forEach(p => {
+        const name = (p.project_name || p.name || '').replace(/\|/g, '/');
+        const parentInfo = p._isSub ? ` (← ${(p._parentName || '').replace(/\|/g, '/')})` : '';
+        const dept = (p.department || '').replace(/\|/g, '/');
+        const budget = p.budget?.['2026_budget'] || 0;
+        const budgetStr = budget >= 100 ? (budget / 100).toFixed(1) + '억' : budget + '백만';
+        lines.push(`| ${name}${parentInfo} | ${dept} | ${budgetStr} |`);
+      });
+      lines.push('');
+    });
+  }
+
+  return lines.join('\n');
+}
+
+function _downloadSearchResultMd() {
+  const md = _buildSearchResultMd();
+  if (!md) return;
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const kw = (_lastSearchResult?.searchTerms || []).join('_').replace(/[^가-힣a-zA-Z0-9_]/g, '') || 'result';
+  a.download = `유사도분석_${kw}_${new Date().toISOString().slice(0,10)}.md`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function _hlText(text, terms) {
+  if (!text || !terms || terms.length === 0) return text || '';
+  const escaped = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp('(' + escaped.join('|') + ')', 'gi');
+  return text.replace(re, '<mark style="background:rgba(74,158,255,0.25);color:inherit;padding:0 1px;border-radius:2px">$1</mark>');
+}
+
+// Per-project: show which fields matched the search keywords
+function _buildFieldMatchInfo(p, terms) {
+  if (!terms || terms.length === 0) return '';
+  const fields = [
+    { label: '사업명', val: p.project_name || p.name || '' },
+    { label: '내역사업', val: (p.sub_projects || []).map(s => s.name).join(' ') },
+    { label: '부처', val: p.department || '' },
+    { label: '사업목적', val: p.purpose || '' },
+    { label: '사업내용', val: p.description || '' },
+    { label: '법적근거', val: p.legal_basis || '' },
+    { label: '시행기관', val: p.implementing_agency || '' },
+    { label: '프로그램', val: p.program?.name || '' },
+    { label: '단위사업', val: p.unit_project?.name || '' },
+    { label: '세부사업', val: p.detail_project?.name || '' },
+    { label: '키워드', val: (p.keywords || []).join(' ') },
+    { label: 'AI도메인', val: (p.ai_domains || []).join(' ') },
+    { label: '분야', val: [p.field, p.sector].filter(Boolean).join(' ') },
+    { label: '회계', val: p.account_type || '' },
+    { label: '실/국', val: p.division || '' },
+    { label: '사업관리자', val: (p.project_managers || []).map(m => [m.sub_project, m.managing_dept, m.implementing_agency].join(' ')).join(' ') },
+  ];
+  const matched = [];
+  for (const f of fields) {
+    if (!f.val) continue;
+    const lower = f.val.toLowerCase();
+    const hits = terms.filter(t => lower.includes(t.toLowerCase()));
+    if (hits.length > 0) matched.push({ label: f.label, hits });
+  }
+  return matched;
+}
+
+function _renderFieldMatches(matches, terms) {
+  if (!matches || matches.length === 0) return '';
+  let html = '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">';
+  matches.forEach(m => {
+    html += `<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(74,158,255,0.12);color:var(--accent);white-space:nowrap">${m.label}: ${m.hits.map(h => '<b>' + h + '</b>').join(', ')}</span>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+function _renderSearchSimilarityResult(container, projects, pairs, highPairs, searchTerms, totalPairs, viewMode, subLevel) {
+  const isPair = viewMode === 'pair';
+  const keywordLabel = searchTerms.join(' ');
+  const levelLabel = subLevel ? '내역사업' : '사업';
+
+  // Compute sub-project count hint when in project level
+  let subCountHtml = '';
+  if (!subLevel && _lastSearchResult?.origMatched) {
+    const subCount = _expandToSubProjects(_lastSearchResult.origMatched).length;
+    if (subCount > projects.length) {
+      subCountHtml = `<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#a78bfa15;color:#a78bfa;font-weight:500;cursor:pointer" onclick="document.getElementById('dup-sub-project-level').checked=true;filterDupGroups()" title="체크박스를 클릭하면 내역사업 레벨로 검색합니다">내역사업 ${subCount}건</span>`;
+    }
+  }
+
+  // Header with toggle buttons
+  let html = `<div class="card" style="margin-bottom:20px">
+    <div class="card-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      검색 결과 간 유사도 분석
+      <span style="font-size:12px;font-weight:400;color:var(--text-muted)">"${keywordLabel}" 매칭 ${projects.length}개 ${levelLabel}, ${totalPairs.toLocaleString()}개 쌍</span>
+      <span style="font-size:10px;padding:2px 8px;border-radius:4px;background:#34d39922;color:#34d399;font-weight:600">${_SIM_ALGO_LABELS[_lastSearchResult?.algorithm] || 'Jaccard+Cosine'}</span>
+      ${subLevel ? '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:#a78bfa22;color:#a78bfa;font-weight:600">내역사업 레벨</span>' : subCountHtml}
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+        <div style="display:flex;gap:2px;background:var(--bg-main);border-radius:6px;padding:2px;border:1px solid var(--border)">
+          <button onclick="toggleSearchView('pair')" style="padding:4px 12px;font-size:11px;border:none;border-radius:4px;cursor:pointer;font-family:inherit;font-weight:${isPair?'600':'400'};color:${isPair?'var(--accent)':'var(--text-secondary)'};background:${isPair?'var(--accent-dim)':'none'};transition:all 0.2s">쌍 보기</button>
+          <button onclick="toggleSearchView('group')" style="padding:4px 12px;font-size:11px;border:none;border-radius:4px;cursor:pointer;font-family:inherit;font-weight:${!isPair?'600':'400'};color:${!isPair?'var(--accent)':'var(--text-secondary)'};background:${!isPair?'var(--accent-dim)':'none'};transition:all 0.2s">그룹 보기</button>
+        </div>
+        <button onclick="_printSearchResult()" style="padding:4px 10px;font-size:11px;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-family:inherit;color:var(--text-secondary);background:var(--bg-main);transition:all 0.2s" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--text-secondary)'" title="인쇄하기">&#x1F5A8; 인쇄</button>
+        <button onclick="_downloadSearchResultMd()" style="padding:4px 10px;font-size:11px;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-family:inherit;color:var(--text-secondary);background:var(--bg-main);transition:all 0.2s" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--text-secondary)'" title="Markdown 내려받기">&#x2B07; Markdown</button>
+      </div>
+    </div>`;
+
+  if (isPair) {
+    html += _renderPairView(projects, pairs, highPairs, searchTerms);
+  } else {
+    html += _renderGroupView(projects, pairs, searchTerms);
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function _subLabel(p, hl) {
+  if (!p._isSub) return '';
+  return `<span style="font-size:10px;color:var(--text-muted);display:block;margin-top:1px">← ${hl(p._parentName)}</span>`;
+}
+
+function _renderPairView(projects, pairs, highPairs, searchTerms) {
+  const hl = t => _hlText(t, searchTerms);
+  let html = '';
+
+  if (projects.length <= 12) {
+    const pairMap = {};
+    pairs.forEach(p => {
+      pairMap[p.a.id + '_' + p.b.id] = p;
+      pairMap[p.b.id + '_' + p.a.id] = p;
+    });
+
+    html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:8px"><thead><tr><th style="padding:6px;border:1px solid var(--border);background:var(--bg-main);min-width:120px"></th>';
+    projects.forEach(p => {
+      const short = (p.project_name || p.name || '').substring(0, 15);
+      html += `<th style="padding:6px;border:1px solid var(--border);background:var(--bg-main);writing-mode:vertical-lr;max-width:30px;font-weight:500" title="${p.project_name || p.name}">${hl(short)}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    for (let i = 0; i < projects.length; i++) {
+      const short = (projects[i].project_name || projects[i].name || '').substring(0, 20);
+      html += `<tr><td style="padding:6px;border:1px solid var(--border);background:var(--bg-main);font-weight:500;white-space:nowrap" title="${projects[i].project_name || projects[i].name}">${hl(short)}</td>`;
+      for (let j = 0; j < projects.length; j++) {
+        if (i === j) {
+          html += '<td style="padding:6px;border:1px solid var(--border);background:var(--bg-card);text-align:center;color:var(--text-muted)">-</td>';
+        } else {
+          const pair = pairMap[projects[i].id + '_' + projects[j].id];
+          const val = pair ? pair.combined : 0;
+          const pct = Math.round(val * 100);
+          const bg = val >= 0.6 ? '#f8717133' : val >= 0.3 ? '#fbbf2433' : val >= 0.1 ? '#34d39922' : 'transparent';
+          const color = val >= 0.6 ? '#f87171' : val >= 0.3 ? '#fbbf24' : val >= 0.1 ? '#34d399' : 'var(--text-muted)';
+          const ids = [projects[i]._parentId || projects[i].id, projects[j]._parentId || projects[j].id].filter(id => id != null);
+          const sharedPreview = (pair?.shared || []).slice(0, 5).join(', ');
+          const tipExtra = sharedPreview ? `\n공통: ${sharedPreview}` : '';
+          const algoTip = _lastSearchResult?.algorithm === 'hybrid' ? `Jaccard: ${(pair?.jaccard*100||0).toFixed(1)}% / Cosine: ${(pair?.cosine*100||0).toFixed(1)}%` : `${_SIM_ALGO_LABELS[_lastSearchResult?.algorithm] || ''}: ${(val*100).toFixed(1)}%`;
+          html += `<td style="padding:6px;border:1px solid var(--border);text-align:center;background:${bg};color:${color};font-weight:${val>=0.3?'700':'400'};cursor:pointer" onclick="openDupGroupCompare([${ids}])" title="${algoTip}${tipExtra}">${pct}%</td>`;
+        }
+      }
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+  } else {
+    html += `<div style="font-size:12px;color:var(--text-muted);margin:8px 0">유사도 30% 이상 ${highPairs.length}개 쌍 표시 (전체 ${pairs.length.toLocaleString()}쌍)</div>`;
+  }
+
+  // Top pairs list with keyword highlights and field match info
+  const showPairs = pairs.slice(0, 30);
+  if (showPairs.length > 0) {
+    html += '<div style="margin-top:12px">';
+    showPairs.forEach(p => {
+      const pct = Math.round(p.combined * 100);
+      const barColor = pct >= 60 ? '#f87171' : pct >= 30 ? '#fbbf24' : '#34d399';
+      const idA = p.a._parentId || p.a.id;
+      const idB = p.b._parentId || p.b.id;
+      const ids = [idA, idB].filter(id => id != null);
+      const reasons = _buildSimReason(p.shared || [], p.a, p.b);
+      const reasonHtml = _renderReasonTags(reasons, 8);
+      const matchA = _buildFieldMatchInfo(p.a, searchTerms);
+      const matchB = _buildFieldMatchInfo(p.b, searchTerms);
+      html += `<div style="padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.15s" onmouseenter="this.style.background='var(--bg-main)'" onmouseleave="this.style.background=''" onclick="openDupGroupCompare([${ids}])">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="min-width:48px;font-weight:700;color:${barColor};font-size:14px">${pct}%</div>
+          <div style="width:60px;height:6px;background:var(--bg-main);border-radius:3px;overflow:hidden;flex-shrink:0">
+            <div style="width:${pct}%;height:100%;background:${barColor};border-radius:3px"></div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;overflow:hidden;text-overflow:ellipsis"><span style="color:var(--text-muted)">${hl(p.a.department)}</span> ${hl(p.a.project_name || p.a.name)}</div>
+            ${_subLabel(p.a, hl)}
+            ${_renderFieldMatches(matchA, searchTerms)}
+            <div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;margin-top:4px"><span style="color:var(--text-muted)">${hl(p.b.department)}</span> ${hl(p.b.project_name || p.b.name)}</div>
+            ${_subLabel(p.b, hl)}
+            ${_renderFieldMatches(matchB, searchTerms)}
+          </div>
+          <div style="font-size:10px;color:var(--text-muted);white-space:nowrap;text-align:right">
+            ${_lastSearchResult?.algorithm === 'hybrid' ? `J:${(p.jaccard*100).toFixed(0)}% C:${(p.cosine*100).toFixed(0)}%` : (_SIM_ALGO_LABELS[_lastSearchResult?.algorithm] || '') + ':' + (p.combined*100).toFixed(0) + '%'}
+          </div>
+          <span style="font-size:11px;color:var(--accent);white-space:nowrap">비교 →</span>
+        </div>
+        ${reasonHtml}
+      </div>`;
+    });
+    html += '</div>';
+  }
+  return html;
+}
+
+function _renderGroupView(projects, pairs, searchTerms) {
+  const hl = t => _hlText(t, searchTerms);
+  // Union-Find clustering with threshold >= 30%
+  const parent = {};
+  projects.forEach(p => { parent[p.id] = p.id; });
+  function find(x) { return parent[x] === x ? x : (parent[x] = find(parent[x])); }
+  function union(a, b) { parent[find(a)] = find(b); }
+
+  const threshold = 0.3;
+  pairs.filter(p => p.combined >= threshold).forEach(p => union(p.a.id, p.b.id));
+
+  // Build groups
+  const groupMap = {};
+  projects.forEach(p => {
+    const root = find(p.id);
+    if (!groupMap[root]) groupMap[root] = [];
+    groupMap[root].push(p);
+  });
+
+  // Build pairMap for intra-group scores
+  const pairMap = {};
+  pairs.forEach(p => {
+    pairMap[p.a.id + '_' + p.b.id] = p;
+    pairMap[p.b.id + '_' + p.a.id] = p;
+  });
+
+  // Sort groups: multi-member first (by size desc), then singletons
+  const groups = Object.values(groupMap).sort((a, b) => b.length - a.length);
+  const multiGroups = groups.filter(g => g.length > 1);
+  const singletons = groups.filter(g => g.length === 1);
+
+  let html = `<div style="font-size:12px;color:var(--text-muted);margin:8px 0 12px">유사도 30% 이상 기준 클러스터링: <strong style="color:var(--text)">${multiGroups.length}개 그룹</strong> (${multiGroups.reduce((s,g)=>s+g.length,0)}개 사업)${singletons.length ? `, 단독 ${singletons.length}건` : ''}</div>`;
+
+  multiGroups.forEach((group, gi) => {
+    // Compute avg similarity within group
+    let simSum = 0, simCount = 0;
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const p = pairMap[group[i].id + '_' + group[j].id];
+        if (p) { simSum += p.combined; simCount++; }
+      }
+    }
+    const avgSim = simCount > 0 ? simSum / simCount : 0;
+    const avgPct = Math.round(avgSim * 100);
+    const gradeColor = avgPct >= 60 ? '#f87171' : avgPct >= 30 ? '#fbbf24' : '#34d399';
+    const totalBudget = group.reduce((s, p) => s + (p.budget?.['2026_budget'] || 0), 0);
+    const depts = [...new Set(group.map(p => p.department))];
+    const gIds = [...new Set(group.map(p => p._parentId || p.id))].filter(id => id != null);
+
+    // Collect common tokens across all group members
+    const groupTokenSets = group.map(p => new Set(_tokenize(_projectFullText(p))));
+    const commonTokens = [...groupTokenSets[0]].filter(t => groupTokenSets.every(s => s.has(t)));
+    // Filter out very short/common tokens, keep meaningful ones
+    const meaningfulCommon = commonTokens.filter(t => t.length >= 2).slice(0, 10);
+
+    html += `<div class="dup-group" style="cursor:pointer;margin-bottom:12px" onclick="openDupGroupCompare([${gIds}])" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor=''">
+      <div class="dup-group-header">
+        <div>
+          <div class="dup-group-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            그룹 ${gi + 1}
+            <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${gradeColor}22;color:${gradeColor}">평균 유사도 ${avgPct}%</span>
+            <span style="font-size:11px;color:var(--text-muted)">${group.length}개 사업 · ${depts.length}개 부처</span>
+          </div>
+          ${meaningfulCommon.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${meaningfulCommon.map(t => `<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--accent-dim);color:var(--accent)">${hl(t)}</span>`).join('')}</div>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="dup-group-budget">${formatBillion(totalBudget)}</div>
+          <span style="font-size:11px;color:var(--accent);white-space:nowrap">비교 →</span>
+        </div>
+      </div>`;
+
+    group.forEach(p => {
+      const budget = p.budget?.['2026_budget'] || 0;
+      const fMatches = _buildFieldMatchInfo(p, searchTerms);
+      html += `<div class="dup-project-row" style="flex-wrap:wrap">
+        <span class="dept">${hl(p.department)}</span>
+        <span style="flex:1;margin:0 12px">${hl(p.project_name || p.name)}${p._isSub ? `<span style="font-size:10px;color:var(--text-muted);margin-left:6px">← ${hl(p._parentName)}</span>` : ''}</span>
+        <span class="num" style="min-width:80px;text-align:right">${formatBillion(budget)}</span>
+        ${_renderFieldMatches(fMatches, searchTerms)}
+      </div>`;
+    });
+
+    // Intra-group pairwise similarities with reasons
+    if (group.length <= 8) {
+      html += '<div style="padding:8px 12px;border-top:1px solid var(--border);font-size:11px">';
+      for (let i = 0; i < group.length; i++) {
+        for (let j = i + 1; j < group.length; j++) {
+          const p = pairMap[group[i].id + '_' + group[j].id];
+          if (p && p.combined >= 0.1) {
+            const pct = Math.round(p.combined * 100);
+            const c = pct >= 60 ? '#f87171' : pct >= 30 ? '#fbbf24' : '#34d399';
+            const nameA = (group[i].project_name || group[i].name || '').substring(0, 15);
+            const nameB = (group[j].project_name || group[j].name || '').substring(0, 15);
+            const reasons = _buildSimReason(p.shared || [], p.a, p.b);
+            const reasonHtml = _renderReasonTags(reasons, 5);
+            html += `<div style="margin-bottom:4px"><span style="display:inline-flex;align-items:center;gap:4px;color:var(--text-muted)"><span style="font-weight:600;color:${c}">${pct}%</span> ${hl(nameA)} ↔ ${hl(nameB)}</span>${reasonHtml}</div>`;
+          }
+        }
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
+  });
+
+  // Singletons summary
+  if (singletons.length > 0) {
+    html += `<div style="margin-top:16px;padding:12px;background:var(--bg-main);border-radius:8px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text-secondary)">단독 사업 (유사 그룹 미형성) - ${singletons.length}건</div>`;
+    singletons.forEach(([p]) => {
+      const budget = p.budget?.['2026_budget'] || 0;
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">
+        <span style="color:var(--text-muted);min-width:80px">${hl(p.department)}</span>
+        <span style="flex:1">${hl(p.project_name || p.name)}</span>
+        <span style="color:var(--text-muted);min-width:70px;text-align:right">${formatBillion(budget)}</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  return html;
+}
+
+function renderDupGroups(groups, containerId) {
+  const container = document.getElementById(containerId || 'dup-groups-container');
   if (groups.length === 0) {
     container.innerHTML = '<div class="no-data-message"><h3>중복 의심 그룹이 없습니다</h3></div>';
     return;
