@@ -1953,9 +1953,8 @@
     const cardsEl = document.getElementById('pc-nonai-reason-cards');
     if (cardsEl) {
       cardsEl.innerHTML = reasonRank.map((r, ri) => {
-        const sorted = r.projects.sort((a, b) => _b26(b) - _b26(a));
-        const topProjects = sorted.slice(0, 3);
-        return `<div class="pc-rec-card severity-${r.budget > 1000000 ? 'high' : r.budget > 100000 ? 'medium' : 'low'}" style="cursor:pointer" data-reason-idx="${ri}">
+        const topProjects = r.projects.sort((a, b) => _b26(b) - _b26(a)).slice(0, 3);
+        return `<div class="pc-rec-card severity-${r.budget > 1000000 ? 'high' : r.budget > 100000 ? 'medium' : 'low'}" style="cursor:pointer" data-reason-id="${r.id}">
           <div class="rec-severity">${r.name}</div>
           <div class="rec-title">${r.projects.length}건, ${_fmt(r.budget)}</div>
           <div class="rec-body">${r.desc}</div>
@@ -1964,60 +1963,31 @@
               <span style="font-weight:400;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${p.department} — ${(p.project_name || p.name || '').substring(0, 35)}</span>
               <span style="margin-left:8px">${_fmt(_b26(p))}</span>
             </div>`).join('')}
-            ${sorted.length > 3 ? `<div style="width:100%;text-align:center;padding:4px 0;color:var(--accent);font-size:11px;font-weight:600">▼ 클릭하여 전체 ${sorted.length}건 보기</div>` : ''}
-          </div>
-          <div class="nai-reason-detail" id="nai-reason-detail-${ri}" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
-            <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
-              <table class="data-table" style="width:100%;font-size:11px">
-                <thead><tr>
-                  <th style="min-width:60px">부처</th>
-                  <th style="min-width:160px">사업명</th>
-                  ${AI_FIELDS.map(f => `<th style="text-align:center;min-width:50px;font-size:10px;white-space:nowrap" title="${f.label}에서 AI 키워드 검출 여부">${f.label}</th>`).join('')}
-                  <th style="text-align:right;min-width:60px">예산</th>
-                </tr></thead>
-                <tbody>
-                  ${sorted.map(p => {
-                    const pName = (p.project_name || p.name || '');
-                    const fr = p.fieldResults || {};
-                    return `<tr style="cursor:pointer" onclick="event.stopPropagation();if(typeof showProjectModal==='function')showProjectModal(${p.id})">
-                      <td style="white-space:nowrap">${p.department.substring(0, 8)}</td>
-                      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${pName}">${pName}</td>
-                      ${AI_FIELDS.map(f => {
-                        const r2 = fr[f.id];
-                        if (!r2) return '<td style="text-align:center;color:var(--text-muted)">-</td>';
-                        if (!r2.hasText) return '<td style="text-align:center;color:var(--text-muted);font-size:10px" title="데이터 없음">&#8212;</td>';
-                        if (r2.keywords.length > 0) return `<td style="text-align:center" title="${r2.keywords.join(', ')}"><span style="color:var(--green);font-weight:700">&#10003;</span></td>`;
-                        return '<td style="text-align:center"><span style="color:var(--red);font-weight:700">&#10007;</span></td>';
-                      }).join('')}
-                      <td style="text-align:right;font-weight:600;white-space:nowrap">${_fmt(_b26(p))}</td>
-                    </tr>`;
-                  }).join('')}
-                </tbody>
-              </table>
-            </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;text-align:right">
-              합계: <strong>${_fmt(r.budget)}</strong>
-              &nbsp;|&nbsp; <span style="color:var(--green)">&#10003;</span> AI 키워드 있음 &nbsp; <span style="color:var(--red)">&#10007;</span> 없음 &nbsp; &#8212; 데이터 없음
-            </div>
+            <div style="width:100%;text-align:center;padding:4px 0;color:var(--accent);font-size:11px;font-weight:600">▼ 클릭하여 아래 목록에서 전체 ${r.projects.length}건 보기</div>
           </div>
         </div>`;
       }).join('');
 
-      // Toggle detail list on card click
-      cardsEl.querySelectorAll('.pc-rec-card[data-reason-idx]').forEach(card => {
-        card.addEventListener('click', (e) => {
-          const idx = card.dataset.reasonIdx;
-          const detail = document.getElementById('nai-reason-detail-' + idx);
-          if (!detail) return;
-          const isOpen = detail.style.display !== 'none';
-          // Close all others
-          cardsEl.querySelectorAll('.nai-reason-detail').forEach(d => { d.style.display = 'none'; });
+      // Card click → set reason filter on table below and scroll
+      cardsEl.querySelectorAll('.pc-rec-card[data-reason-id]').forEach(card => {
+        card.addEventListener('click', () => {
+          const rid = card.dataset.reasonId;
+          // Highlight selected card
           cardsEl.querySelectorAll('.pc-rec-card').forEach(c => { c.style.boxShadow = ''; c.style.borderColor = ''; });
-          if (!isOpen) {
-            detail.style.display = 'block';
-            card.style.borderColor = 'var(--accent)';
-            card.style.boxShadow = 'var(--shadow)';
-          }
+          card.style.borderColor = 'var(--accent)';
+          card.style.boxShadow = 'var(--shadow)';
+          // Set reason filter
+          const sel = document.getElementById('pc-nonai-reason-filter');
+          if (sel) { sel.value = rid; }
+          // Clear other filters for clean view
+          const deptSel = document.getElementById('pc-nonai-dept-filter');
+          if (deptSel) deptSel.value = '';
+          const searchInput = document.getElementById('pc-nonai-search');
+          if (searchInput) searchInput.value = '';
+          renderNonAiTable();
+          // Scroll to table
+          const tableWrap = document.getElementById('pc-nonai-table-wrap');
+          if (tableWrap) tableWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       });
     }
