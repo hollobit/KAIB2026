@@ -7762,57 +7762,121 @@ document.getElementById('compare-modal')?.addEventListener('click', function(e) 
 });
 
 // ==================== Markdown Download ====================
-function downloadMarkdown() {
+async function downloadMarkdown() {
   if (!DATA) return;
   const projects = DATA.projects;
   const meta = DATA.metadata;
   const analysis = DATA.analysis || {};
   const fmtB = v => { if (!v) return '0'; const b = v / 100; return b >= 10000 ? (b / 10000).toFixed(2) + '조' : b >= 1 ? b.toFixed(1) + '억' : v.toFixed(0) + '백만'; };
   const fmtN = v => v != null ? Number(v).toLocaleString('ko-KR') : '-';
+  const fmtR = v => v != null ? Number(v).toFixed(1) : '-';
   const nl = '\n';
+  const cleanText = t => t ? t.replace(/\n{3,}/g, '\n\n').replace(/- \d+ -\n?/g, '').trim() : '';
+
+  // Load raw data for full PDF text
+  let rawMap = {};
+  try {
+    const resp = await fetch('data/budget_raw.json');
+    const rawData = await resp.json();
+    rawData.forEach(p => { rawMap[p.id] = p; });
+  } catch(e) { console.warn('budget_raw.json 로드 실패, 구조화 데이터만 사용:', e); }
   let md = '';
 
-  // Title
-  md += '# 2026년 AI 재정사업 현황' + nl + nl;
-  md += '> 분석일: ' + new Date().toLocaleDateString('ko-KR') + ' | 출처: ' + (meta.source || '2026년 AI 재정사업 현황') + nl + nl;
+  // ===== PART 1: 총괄 분석 =====
+  md += '# 2026년 AI 재정사업 전체 분석 보고서' + nl + nl;
+  md += '> 분석일: ' + new Date().toLocaleDateString('ko-KR') + ' | 출처: ' + (meta.source || '2026년 AI 재정사업 현황') + nl;
+  md += '> 추출일: ' + (meta.extraction_date || '-') + ' | 본 문서는 기계 재활용 가능한 완전한 데이터를 포함합니다.' + nl + nl;
 
-  // Summary
-  md += '## 총괄 요약' + nl + nl;
+  // 1. 총괄 요약
+  md += '## 1. 총괄 요약' + nl + nl;
   const totalBudget = projects.reduce((s, p) => s + getBudget2026(p), 0);
   const totalBudget2025 = projects.reduce((s, p) => s + getBudget2025(p), 0);
+  const totalBudget2024 = projects.reduce((s, p) => s + (p.budget && p.budget['2024_settlement'] || 0), 0);
   const totalSubs = projects.reduce((s, p) => s + (p.sub_projects || []).length, 0);
-  md += '| 항목 | 값 |' + nl;
-  md += '|------|-----|' + nl;
+  const rndCount = projects.filter(p => p.is_rnd).length;
+  const infoCount = projects.filter(p => p.is_informatization).length;
+  const newCount = projects.filter(p => p.status === '신규').length;
+  md += '| 항목 | 값 |' + nl + '|------|-----|' + nl;
   md += '| 총 사업 수 | ' + meta.total_projects + '개 |' + nl;
   md += '| 총 부처 수 | ' + meta.total_departments + '개 |' + nl;
+  md += '| R&D 사업 | ' + rndCount + '개 |' + nl;
+  md += '| 정보화 사업 | ' + infoCount + '개 |' + nl;
+  md += '| 일반 사업 | ' + (meta.total_projects - rndCount - infoCount + projects.filter(p => p.is_rnd && p.is_informatization).length) + '개 |' + nl;
+  md += '| 신규 사업 | ' + newCount + '개 |' + nl;
   md += '| 총 내역사업 수 | ' + fmtN(totalSubs) + '개 |' + nl;
-  md += '| 2026 총 예산 | ' + fmtB(totalBudget) + ' (' + fmtN(totalBudget) + ' 백만원) |' + nl;
-  md += '| 2025 총 예산 | ' + fmtB(totalBudget2025) + ' (' + fmtN(totalBudget2025) + ' 백만원) |' + nl;
-  md += '| 전년 대비 증감 | ' + fmtB(Math.abs(totalBudget - totalBudget2025)) + ' ' + (totalBudget >= totalBudget2025 ? '증가' : '감소') + ' |' + nl;
+  md += '| 2024 결산 합계 | ' + fmtN(Math.round(totalBudget2024)) + ' 백만원 |' + nl;
+  md += '| 2025 본예산 합계 | ' + fmtN(Math.round(totalBudget2025)) + ' 백만원 |' + nl;
+  md += '| 2026 확정예산 합계 | ' + fmtN(Math.round(totalBudget)) + ' 백만원 |' + nl;
+  md += '| 전년 대비 증감 | ' + fmtN(Math.round(totalBudget - totalBudget2025)) + ' 백만원 (' + ((totalBudget - totalBudget2025) / totalBudget2025 * 100).toFixed(1) + '%) |' + nl;
   md += nl;
 
-  // Department summary
-  md += '## 부처별 예산 현황' + nl + nl;
-  const deptBudget = {};
-  projects.forEach(p => { const d = p.department; if (!deptBudget[d]) deptBudget[d] = { count: 0, budget: 0, budget2025: 0 }; deptBudget[d].count++; deptBudget[d].budget += getBudget2026(p); deptBudget[d].budget2025 += getBudget2025(p); });
-  const topDepts = Object.entries(deptBudget).sort((a, b) => b[1].budget - a[1].budget);
-  md += '| 순위 | 부처명 | 사업 수 | 2026 예산(백만원) | 2025 예산(백만원) | 증감액(백만원) |' + nl;
-  md += '|------|--------|---------|-------------------|-------------------|----------------|' + nl;
-  topDepts.forEach(([d, v], i) => {
-    md += '| ' + (i + 1) + ' | ' + d + ' | ' + v.count + ' | ' + fmtN(v.budget) + ' | ' + fmtN(v.budget2025) + ' | ' + fmtN(v.budget - v.budget2025) + ' |' + nl;
+  // 2. 유형별 집계
+  md += '## 2. 유형별 예산 집계' + nl + nl;
+  const byType = analysis.by_type || {};
+  md += '| 유형 | 사업 수 | 2026 예산(백만원) | 비중(%) |' + nl;
+  md += '|------|---------|-------------------|---------|' + nl;
+  Object.entries(byType).forEach(([t, v]) => {
+    md += '| ' + t + ' | ' + v.count + ' | ' + fmtN(v.total) + ' | ' + (v.total / totalBudget * 100).toFixed(1) + ' |' + nl;
   });
   md += nl;
 
-  // Duplicate analysis
+  // 3. 부처별 예산 현황
+  md += '## 3. 부처별 예산 현황' + nl + nl;
+  const byDept = analysis.by_department || {};
+  const deptEntries = Object.entries(byDept).sort((a, b) => (b[1].total_2026 || 0) - (a[1].total_2026 || 0));
+  md += '| 순위 | 부처명 | 사업수 | R&D | 정보화 | 2024결산 | 2025본예산 | 2026확정 | 증감액 | 증감률(%) | 평균예산 |' + nl;
+  md += '|------|--------|--------|-----|--------|----------|-----------|----------|--------|-----------|----------|' + nl;
+  deptEntries.forEach(([d, v], i) => {
+    md += '| ' + (i + 1) + ' | ' + d + ' | ' + v.count + ' | ' + (v.rnd_count || 0) + ' | ' + (v.info_count || 0) + ' | ' + fmtN(v.total_2024) + ' | ' + fmtN(v.total_2025) + ' | ' + fmtN(v.total_2026) + ' | ' + fmtN(v.change_amount) + ' | ' + fmtR(v.change_rate) + ' | ' + fmtN(Math.round(v.avg_budget || 0)) + ' |' + nl;
+  });
+  md += nl;
+
+  // 4. AI 도메인별 집계
+  md += '## 4. AI 도메인별 예산 집계' + nl + nl;
+  const byDomain = analysis.by_domain || {};
+  const domEntries = Object.entries(byDomain).sort((a, b) => (b[1].total || 0) - (a[1].total || 0));
+  md += '| 도메인 | 사업 수 | 2026 예산(백만원) | 비중(%) |' + nl;
+  md += '|--------|---------|-------------------|---------|' + nl;
+  domEntries.forEach(([d, v]) => {
+    md += '| ' + d + ' | ' + v.count + ' | ' + fmtN(v.total) + ' | ' + (v.total / totalBudget * 100).toFixed(1) + ' |' + nl;
+  });
+  md += nl;
+
+  // 5. 예산 증감 TOP 20
+  const topInc = analysis.top_increases || [];
+  const topDec = analysis.top_decreases || [];
+  if (topInc.length > 0) {
+    md += '## 5. 예산 증가 TOP 20' + nl + nl;
+    md += '| 순위 | 부처 | 사업명 | 2026예산(백만원) | 증감액(백만원) | 증감률(%) |' + nl;
+    md += '|------|------|--------|-----------------|---------------|-----------|' + nl;
+    topInc.forEach((p, i) => {
+      md += '| ' + (i + 1) + ' | ' + p.department + ' | ' + p.name + ' | ' + fmtN(p.budget_2026) + ' | ' + fmtN(p.change_amount) + ' | ' + fmtR(p.change_rate) + ' |' + nl;
+    });
+    md += nl;
+  }
+  if (topDec.length > 0) {
+    md += '## 6. 예산 감소 TOP 20' + nl + nl;
+    md += '| 순위 | 부처 | 사업명 | 2026예산(백만원) | 증감액(백만원) | 증감률(%) |' + nl;
+    md += '|------|------|--------|-----------------|---------------|-----------|' + nl;
+    topDec.forEach((p, i) => {
+      md += '| ' + (i + 1) + ' | ' + p.department + ' | ' + p.name + ' | ' + fmtN(p.budget_2026) + ' | ' + fmtN(p.change_amount) + ' | ' + fmtR(p.change_rate) + ' |' + nl;
+    });
+    md += nl;
+  }
+
+  // 7. 중복 의심 사업
   const dups = analysis.duplicates || [];
-  const kwClusters = analysis.keyword_clusters || [];
   if (dups.length > 0) {
-    md += '## 중복 의심 사업' + nl + nl;
+    md += '## 7. 중복 의심 사업 그룹 (' + dups.length + '개)' + nl + nl;
     dups.forEach((g, i) => {
-      md += '### ' + (i + 1) + '. ' + g.group_name + nl + nl;
+      md += '### 7.' + (i + 1) + '. ' + g.group_name + nl + nl;
       md += '- 사업 수: ' + (g.project_count || g.projects.length) + '개' + nl;
-      md += '- 총 예산: ' + fmtB(g.total_budget || 0) + ' (' + fmtN(g.total_budget || 0) + ' 백만원)' + nl;
-      if (g.grade) md += '- 유사도: ' + g.grade + nl;
+      md += '- 총 예산: ' + fmtN(g.total_budget || 0) + ' 백만원' + nl;
+      md += '- 관련 부처: ' + (g.departments || []).join(', ') + nl;
+      md += '- 등급: ' + (g.grade || '-') + nl;
+      if (g.similarity_score != null) md += '- Jaccard: ' + (g.similarity_score * 100).toFixed(1) + '%' + nl;
+      if (g.tfidf_score != null) md += '- TF-IDF: ' + (g.tfidf_score * 100).toFixed(1) + '%' + nl;
+      if (g.lsa_score != null) md += '- LSA: ' + (g.lsa_score * 100).toFixed(1) + '%' + nl;
       md += nl;
       md += '| 부처 | 사업명 | 2026 예산(백만원) |' + nl;
       md += '|------|--------|-------------------|' + nl;
@@ -7823,28 +7887,85 @@ function downloadMarkdown() {
     });
   }
 
+  // 8. 키워드 클러스터
+  const kwClusters = analysis.keyword_clusters || [];
   if (kwClusters.length > 0) {
-    md += '## 키워드 클러스터 (다부처 유사사업)' + nl + nl;
-    md += '| 키워드 | 사업 수 | 부처 수 | 총 예산(백만원) |' + nl;
-    md += '|--------|---------|---------|-----------------|' + nl;
-    kwClusters.forEach(c => {
-      md += '| ' + c.keyword + ' | ' + c.project_count + ' | ' + c.department_count + ' | ' + fmtN(c.total_budget || 0) + ' |' + nl;
+    md += '## 8. 키워드 클러스터 (' + kwClusters.length + '개)' + nl + nl;
+    kwClusters.forEach((c, i) => {
+      md += '### 8.' + (i + 1) + '. ' + c.keyword + nl + nl;
+      md += '- 사업 수: ' + c.project_count + '개, 부처 수: ' + c.department_count + '개' + nl;
+      md += '- 총 예산: ' + fmtN(c.total_budget || 0) + ' 백만원' + nl;
+      md += '- 관련 부처: ' + (c.departments || []).join(', ') + nl + nl;
+      md += '| 부처 | 사업명 | 2026 예산(백만원) |' + nl;
+      md += '|------|--------|-------------------|' + nl;
+      (c.projects || []).forEach(p => {
+        md += '| ' + (p.department || '-') + ' | ' + (p.name || '-') + ' | ' + fmtN(p.budget_2026 || 0) + ' |' + nl;
+      });
+      md += nl;
+    });
+  }
+
+  // 9. 동일 시행기관 다부처 사업
+  const sameAgency = analysis.same_agency || [];
+  if (sameAgency.length > 0) {
+    md += '## 9. 동일 시행기관 다부처 사업 (' + sameAgency.length + '개)' + nl + nl;
+    sameAgency.forEach((g, i) => {
+      md += '### 9.' + (i + 1) + '. ' + g.agency + nl + nl;
+      md += '- 사업 수: ' + g.project_count + '개, 부처 수: ' + g.department_count + '개' + nl;
+      md += '- 총 예산: ' + fmtN(g.total_budget || 0) + ' 백만원' + nl;
+      md += '- 관련 부처: ' + (g.departments || []).join(', ') + nl + nl;
+      md += '| 부처 | 사업명 | 2026 예산(백만원) |' + nl;
+      md += '|------|--------|-------------------|' + nl;
+      (g.projects || []).forEach(p => {
+        md += '| ' + (p.department || '-') + ' | ' + (p.name || '-') + ' | ' + fmtN(p.budget_2026 || 0) + ' |' + nl;
+      });
+      md += nl;
+    });
+  }
+
+  // 10. 유사도 네트워크 요약
+  const network = analysis.duplicate_network || [];
+  if (network.length > 0) {
+    md += '## 10. 유사도 네트워크 상위 50쌍' + nl + nl;
+    const projMap = {};
+    projects.forEach(p => { projMap[p.id] = p; });
+    const topPairs = [...network].sort((a, b) => (b.combined || 0) - (a.combined || 0)).slice(0, 50);
+    md += '| 순위 | 사업 A | 사업 B | Jaccard | TF-IDF | LSA | 종합 | 등급 |' + nl;
+    md += '|------|--------|--------|---------|--------|-----|------|------|' + nl;
+    topPairs.forEach((pair, i) => {
+      const pA = projMap[pair.source];
+      const pB = projMap[pair.target];
+      const nameA = pA ? pA.department + '_' + pA.project_name : String(pair.source);
+      const nameB = pB ? pB.department + '_' + pB.project_name : String(pair.target);
+      md += '| ' + (i + 1) + ' | ' + nameA + ' | ' + nameB + ' | ' + fmtR(pair.jaccard * 100) + '% | ' + fmtR((pair.tfidf || 0) * 100) + '% | ' + fmtR((pair.lsa || 0) * 100) + '% | ' + fmtR((pair.combined || 0) * 100) + '% | ' + (pair.grade || '-') + ' |' + nl;
     });
     md += nl;
   }
 
-  // Separator
+  // ===== PART 2: 전체 사업 상세 =====
   md += '---' + nl + nl;
-  md += '# 전체 사업 상세' + nl + nl;
+  md += '# 전체 사업 상세 (' + projects.length + '개)' + nl + nl;
 
-  // Sort by department then project name
   const sorted = [...projects].sort((a, b) => {
     const dc = a.department.localeCompare(b.department);
     return dc !== 0 ? dc : (a.project_name || a.name).localeCompare(b.project_name || b.name);
   });
 
+  // 유사도 네트워크 인덱스 (사업별 유사 사업 찾기용)
+  const simIndex = {};
+  const projMap = {};
+  projects.forEach(p => { projMap[p.id] = p; });
+  network.forEach(pair => {
+    if ((pair.combined || 0) >= 0.3) {
+      if (!simIndex[pair.source]) simIndex[pair.source] = [];
+      if (!simIndex[pair.target]) simIndex[pair.target] = [];
+      simIndex[pair.source].push(pair);
+      simIndex[pair.target].push(pair);
+    }
+  });
+
   let currentDept = '';
-  sorted.forEach((p, idx) => {
+  sorted.forEach((p) => {
     if (p.department !== currentDept) {
       currentDept = p.department;
       md += '---' + nl + nl;
@@ -7854,40 +7975,65 @@ function downloadMarkdown() {
     const pName = p.project_name || p.name;
     md += '### ' + pName + nl + nl;
 
-    // Basic info table
-    md += '| 항목 | 내용 |' + nl;
-    md += '|------|------|' + nl;
+    // 기본 정보 테이블 (모든 필드 포함)
+    md += '#### 기본 정보' + nl + nl;
+    md += '| 항목 | 내용 |' + nl + '|------|------|' + nl;
+    md += '| ID | ' + p.id + ' |' + nl;
     if (p.code) md += '| 사업코드 | ' + p.code + ' |' + nl;
     md += '| 부처 | ' + p.department + ' |' + nl;
     if (p.division) md += '| 소관부서 | ' + p.division.replace(/\//g, ', ') + ' |' + nl;
     if (p.account_type) md += '| 회계유형 | ' + p.account_type + ' |' + nl;
     if (p.field) md += '| 분야 | ' + p.field + ' |' + nl;
     if (p.sector) md += '| 부문 | ' + p.sector + ' |' + nl;
-    if (p.program) md += '| 프로그램 | ' + (p.program.code ? '[' + p.program.code + '] ' : '') + (p.program.name || '') + ' |' + nl;
-    if (p.unit_project) md += '| 단위사업 | ' + (p.unit_project.code ? '[' + p.unit_project.code + '] ' : '') + (p.unit_project.name || '') + ' |' + nl;
-    if (p.detail_project) md += '| 세부사업 | ' + (p.detail_project.code ? '[' + p.detail_project.code + '] ' : '') + (p.detail_project.name || '') + ' |' + nl;
+    if (p.program) md += '| 프로그램 | [' + (p.program.code || '') + '] ' + (p.program.name || '') + ' |' + nl;
+    if (p.unit_project) md += '| 단위사업 | [' + (p.unit_project.code || '') + '] ' + (p.unit_project.name || '') + ' |' + nl;
+    if (p.detail_project) md += '| 세부사업 | [' + (p.detail_project.code || '') + '] ' + (p.detail_project.name || '') + ' |' + nl;
     md += '| 상태 | ' + (p.status || '-') + ' |' + nl;
     if (p.support_type) md += '| 지원형태 | ' + p.support_type + ' |' + nl;
     if (p.implementing_agency) md += '| 시행기관 | ' + p.implementing_agency + ' |' + nl;
     if (p.subsidy_rate) md += '| 보조율 | ' + p.subsidy_rate + ' |' + nl;
-    if (p.is_rnd) md += '| R&D | 예 |' + nl;
-    if (p.is_informatization) md += '| 정보화 | 예 |' + nl;
-    if (p.project_period && p.project_period.raw) md += '| 사업기간 | ' + p.project_period.raw + ' |' + nl;
-    if (p.total_cost && p.total_cost.raw) md += '| 총사업비 | ' + p.total_cost.raw + ' |' + nl;
+    if (p.loan_rate) md += '| 융자율 | ' + p.loan_rate + ' |' + nl;
+    md += '| R&D 여부 | ' + (p.is_rnd ? '예' : '아니오') + ' |' + nl;
+    md += '| 정보화 여부 | ' + (p.is_informatization ? '예' : '아니오') + ' |' + nl;
+    // 사업기간 구조화
+    if (p.project_period) {
+      const pp = p.project_period;
+      if (pp.raw) md += '| 사업기간 | ' + pp.raw + ' |' + nl;
+      else if (pp.start_year) md += '| 사업기간 | ' + pp.start_year + '~' + (pp.end_year || '계속') + (pp.duration ? ' (' + pp.duration + ')' : '') + ' |' + nl;
+    }
+    // 총사업비 구조화
+    if (p.total_cost) {
+      const tc = p.total_cost;
+      if (tc.raw) md += '| 총사업비 | ' + tc.raw + ' |' + nl;
+      else if (tc.total) md += '| 총사업비 | ' + fmtN(tc.total) + '억원 (국비 ' + fmtN(tc.government) + '억원) |' + nl;
+    }
+    if (p.page_start != null) md += '| PDF 페이지 | ' + p.page_start + '~' + p.page_end + ' |' + nl;
     md += nl;
 
-    // Budget
+    // AI 분류 정보
+    const hasAiInfo = (p.ai_domains && p.ai_domains.length > 0) || (p.ai_tech && p.ai_tech.length > 0) || (p.rnd_stage && p.rnd_stage.length > 0) || (p.keywords && p.keywords.length > 0);
+    if (hasAiInfo) {
+      md += '#### AI 분류' + nl + nl;
+      if (p.ai_domains && p.ai_domains.length > 0) md += '- **AI 도메인**: ' + p.ai_domains.join(', ') + nl;
+      if (p.ai_tech && p.ai_tech.length > 0) md += '- **AI 기술유형**: ' + p.ai_tech.join(', ') + nl;
+      if (p.rnd_stage && p.rnd_stage.length > 0) md += '- **R&D 단계**: ' + p.rnd_stage.join(', ') + nl;
+      if (p.keywords && p.keywords.length > 0) md += '- **키워드**: ' + p.keywords.join(', ') + nl;
+      md += nl;
+    }
+
+    // 예산 테이블
     const b = p.budget || {};
     md += '#### 예산 (백만원)' + nl + nl;
-    md += '| 2024 결산 | 2025 본예산 | 2025 추경 | 2026 요구 | 2026 편성 | 증감액 | 증감률(%) |' + nl;
-    md += '|-----------|------------|-----------|-----------|-----------|--------|-----------|' + nl;
-    md += '| ' + fmtN(b['2024_settlement']) + ' | ' + fmtN(b['2025_original']) + ' | ' + fmtN(b['2025_supplementary']) + ' | ' + fmtN(b['2026_request']) + ' | ' + fmtN(b['2026_budget']) + ' | ' + fmtN(b.change_amount) + ' | ' + (b.change_rate != null ? b.change_rate.toFixed(1) : '-') + ' |' + nl;
+    md += '| 2024 결산 | 2025 본예산 | 2025 추경 | 2026 요구 | 2026 확정 | 증감액 | 증감률(%) |' + nl;
+    md += '|-----------|------------|-----------|-----------|----------|--------|-----------|' + nl;
+    md += '| ' + fmtN(b['2024_settlement']) + ' | ' + fmtN(b['2025_original']) + ' | ' + fmtN(b['2025_supplementary']) + ' | ' + fmtN(b['2026_request']) + ' | ' + fmtN(b['2026_budget']) + ' | ' + fmtN(b.change_amount) + ' | ' + fmtR(b.change_rate) + ' |' + nl;
     md += nl;
 
-    // Sub projects
+    // 내역사업
     const subs = p.sub_projects || [];
     if (subs.length > 0) {
-      md += '#### 내역사업 (' + subs.length + '건)' + nl + nl;
+      const subTotal = subs.reduce((s, x) => s + (x.budget_2026 || 0), 0);
+      md += '#### 내역사업 (' + subs.length + '건, 합계: ' + fmtN(Math.round(subTotal)) + ' 백만원)' + nl + nl;
       md += '| 내역사업명 | 2024(백만원) | 2025(백만원) | 2026(백만원) |' + nl;
       md += '|------------|-------------|-------------|-------------|' + nl;
       subs.forEach(s => {
@@ -7896,10 +8042,10 @@ function downloadMarkdown() {
       md += nl;
     }
 
-    // Project managers
+    // 사업관리자
     const mgrs = p.project_managers || [];
     if (mgrs.length > 0) {
-      md += '#### 사업관리자' + nl + nl;
+      md += '#### 사업관리자 (' + mgrs.length + '건)' + nl + nl;
       md += '| 내역사업 | 소관부서 | 시행기관 |' + nl;
       md += '|----------|----------|----------|' + nl;
       mgrs.forEach(m => {
@@ -7908,36 +8054,107 @@ function downloadMarkdown() {
       md += nl;
     }
 
-    // Purpose
-    if (p.purpose) {
-      const cleanPurpose = p.purpose.replace(/\n{3,}/g, '\n\n').replace(/- \d+ -\n?/g, '').trim();
-      if (cleanPurpose.length > 0 && cleanPurpose.length < 5000) {
-        md += '#### 사업목적/내용' + nl + nl;
-        md += cleanPurpose + nl + nl;
+    // PDF 원문 텍스트 (raw_text가 있으면 전체 포함, 없으면 구조화 필드 사용)
+    const raw = rawMap[p.id];
+    if (raw && raw.raw_text && raw.raw_text.length > 0) {
+      // raw_text를 섹션별로 파싱
+      const rt = raw.raw_text;
+      const sections = [];
+      // 주요 섹션 패턴 매칭
+      const sectionPatterns = [
+        { pattern: /(?:1\)\s*사업목적[·ㆍ\s]*내용|□\s*사업목적)/m, title: '사업목적·내용' },
+        { pattern: /(?:2\)\s*사업개요|□\s*사업개요)/m, title: '사업개요' },
+        { pattern: /(?:□\s*사업근거\s*및\s*추진\s*경위|○\s*사업근거)/m, title: '사업근거 및 추진경위' },
+        { pattern: /(?:□\s*추진\s*경위)/m, title: '추진경위' },
+        { pattern: /(?:3\)\s*사업효과|□\s*사업효과)/m, title: '사업효과' },
+        { pattern: /(?:4\)\s*집행절차|□\s*집행절차)/m, title: '집행절차' },
+        { pattern: /(?:5\)\s*주요\s*지출근거|□\s*주요\s*지출근거)/m, title: '주요 지출근거' },
+        { pattern: /(?:6\)\s*타당성조사|□\s*타당성[조사검토])/m, title: '타당성조사' },
+        { pattern: /(?:□\s*기능별.*?예산\s*내역)/m, title: '기능별 예산 내역' },
+        { pattern: /(?:□\s*성과\s*지표|□\s*성과[계관]획)/m, title: '성과지표' },
+      ];
+
+      // 각 섹션의 시작 위치 찾기
+      const found = [];
+      sectionPatterns.forEach(sp => {
+        const m = rt.match(sp.pattern);
+        if (m) {
+          found.push({ title: sp.title, start: m.index, matchLen: m[0].length });
+        }
+      });
+      found.sort((a, b) => a.start - b.start);
+
+      if (found.length > 0) {
+        // 첫 섹션 이전 텍스트 (코드정보, 사업성격 등 - 이미 구조화됨, 스킵)
+        // 각 섹션 텍스트 추출
+        for (let si = 0; si < found.length; si++) {
+          const secStart = found[si].start;
+          const secEnd = si < found.length - 1 ? found[si + 1].start : rt.length;
+          let secText = rt.substring(secStart, secEnd);
+          // 페이지 번호 제거
+          secText = secText.replace(/\n- \d+ -\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+          if (secText.length > 10) {
+            md += '#### ' + found[si].title + nl + nl;
+            md += secText + nl + nl;
+          }
+        }
+      } else {
+        // 섹션 파싱 실패 시 전체 raw_text를 사업설명자료로 출력
+        let fullText = cleanText(rt);
+        if (fullText.length > 0) {
+          md += '#### 사업설명자료 (PDF 원문)' + nl + nl + fullText + nl + nl;
+        }
+      }
+    } else {
+      // raw_text 없으면 기존 구조화 필드 사용
+      if (p.purpose) {
+        const t = cleanText(p.purpose);
+        if (t.length > 0 && t.length < 5000) {
+          md += '#### 사업목적' + nl + nl + t + nl + nl;
+        }
+      }
+      if (p.description && p.description !== p.purpose) {
+        const t = cleanText(p.description);
+        if (t.length > 0 && t.length < 5000 && t !== cleanText(p.purpose)) {
+          md += '#### 사업내용' + nl + nl + t + nl + nl;
+        }
+      }
+      if (p.legal_basis) {
+        const t = cleanText(p.legal_basis);
+        if (t.length > 0 && t.length < 5000) {
+          md += '#### 법적근거' + nl + nl + t + nl + nl;
+        }
       }
     }
 
-    // Legal basis
-    if (p.legal_basis) {
-      const cleanLegal = p.legal_basis.replace(/\n{3,}/g, '\n\n').replace(/- \d+ -\n?/g, '').trim();
-      if (cleanLegal.length > 0 && cleanLegal.length < 5000) {
-        md += '#### 법적근거' + nl + nl;
-        md += cleanLegal + nl + nl;
-      }
-    }
-
-    // Keywords / AI domains
-    if (p.keywords && p.keywords.length > 0) {
-      md += '**키워드**: ' + p.keywords.join(', ') + nl + nl;
-    }
-    if (p.ai_domains && p.ai_domains.length > 0) {
-      md += '**AI 도메인**: ' + p.ai_domains.join(', ') + nl + nl;
+    // 유사 사업 (네트워크 기반)
+    const simPairs = simIndex[p.id] || [];
+    if (simPairs.length > 0) {
+      const sortedPairs = [...simPairs].sort((a, b) => (b.combined || 0) - (a.combined || 0)).slice(0, 10);
+      md += '#### 유사 사업 (상위 ' + Math.min(sortedPairs.length, 10) + '건)' + nl + nl;
+      md += '| 유사 사업 | 부처 | 종합유사도 | Jaccard | TF-IDF | LSA | 등급 |' + nl;
+      md += '|----------|------|-----------|---------|--------|-----|------|' + nl;
+      sortedPairs.forEach(pair => {
+        const otherId = pair.source === p.id ? pair.target : pair.source;
+        const other = projMap[otherId];
+        if (other) {
+          md += '| ' + other.project_name + ' | ' + other.department + ' | ' + fmtR((pair.combined || 0) * 100) + '% | ' + fmtR(pair.jaccard * 100) + '% | ' + fmtR((pair.tfidf || 0) * 100) + '% | ' + fmtR((pair.lsa || 0) * 100) + '% | ' + (pair.grade || '-') + ' |' + nl;
+        }
+      });
+      md += nl;
     }
   });
 
   // Footer
-  md += '---' + nl;
+  md += '---' + nl + nl;
+  md += '## 부록: 데이터 메타정보' + nl + nl;
+  md += '| 항목 | 값 |' + nl + '|------|-----|' + nl;
+  Object.entries(meta).forEach(([k, v]) => {
+    md += '| ' + k + ' | ' + (v != null ? String(v) : '-') + ' |' + nl;
+  });
+  md += nl;
   md += '*2026년 AI 재정사업 분석 플랫폼에서 자동 생성 (' + new Date().toLocaleDateString('ko-KR') + ')*' + nl;
+  md += '*본 문서는 ' + projects.length + '개 사업의 전체 데이터를 포함하며, 추가 분석에 재활용할 수 있습니다.*' + nl;
 
   // Download
   const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
