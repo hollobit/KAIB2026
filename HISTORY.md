@@ -1,5 +1,27 @@
 # 2026년 AI 재정사업 분석 플랫폼 - 업데이트 이력
 
+## 2026-03-08 (v5.9) - 예산서 Markdown에 PDF 원문 텍스트 포함
+
+### 기능 개선
+- **downloadMarkdown() 전면 개선**: 533개 사업별 PDF 원문 텍스트(raw_text) 포함
+  - `budget_raw.json`에서 raw_text를 비동기 로딩 (`async function`)
+  - raw_text를 섹션별 자동 파싱 (사업목적·내용, 사업개요, 사업근거 및 추진경위, 사업효과, 집행절차, 주요 지출근거, 타당성조사, 기능별 예산 내역, 성과지표)
+  - 기존 purpose/description/legal_basis 대비 ~89% 추가 정보 포함
+  - 파싱 실패 시 전체 raw_text를 fallback으로 출력
+  - raw_text 미존재 시 기존 구조화 필드 사용
+
+### 문서 업데이트
+- **ISSUE.md, GUIDE.md, Data-format.md**: 5개 전문가 에이전트 리뷰 반영 완료
+- **Data-format.md**: Markdown 구조 섹션에 PDF 원문 섹션 구조 반영
+
+### 파일 변경 요약
+| 파일 | 변경 |
+|------|------|
+| `output/index.html` | downloadMarkdown() raw_text 파싱 추가 |
+| `ISSUE.md` | 신규 생성 - AI 재정문서 비판적 분석 |
+| `GUIDE.md` | 신규 생성 - Machine-readable 교환 가이드라인 |
+| `Data-format.md` | 신규 생성 - 데이터 구조 및 활용 문서 |
+
 ## 2026-03-08 (v5.8) - 대한무역투자진흥공사 사업추진체계 기반 보정
 
 ### PDF 추출 개선
