@@ -15,3 +15,6 @@ http://hollobit.github.io/KAIB2026
 ## 관련 링크 
 * [(대통령직속) 국가인공지능전략위원회](https://www.aikorea.go.kr/)
 * ['26.3 AI 예산사업 통합 설명자료](https://www.aikorea.go.kr/web/board/brdDetail.do?menu_cd=000011&num=359&currentPage=1&searchData=&searchText=)
+
+---- 
+Jonghong Jeon (hollobit@etri.re.kr)
